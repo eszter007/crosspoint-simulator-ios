@@ -13,6 +13,8 @@
 #include <sstream>
 #include <vector>
 
+#include "SimulatorPlatform.h"
+
 HalStorage HalStorage::instance;
 HalStorage::HalStorage() {}
 
@@ -22,7 +24,16 @@ std::string configuredStorageRoot() {
   if (!root || !*root) {
     root = std::getenv("CROSSPOINT_EMU_SD");
   }
-  return (root && *root) ? std::string(root) : std::string("./fs_");
+  if (root && *root) {
+    return std::string(root);
+  }
+  // Platforms with no usable working directory name their own location; on iOS
+  // that is the app's sandboxed Documents directory. Still overridable above,
+  // so a desktop run is unaffected.
+  if (const char *documents = simPlatformDocumentsPath()) {
+    return std::string(documents);
+  }
+  return std::string("./fs_");
 }
 
 bool containsUnsafeSegment(const std::string &path) {

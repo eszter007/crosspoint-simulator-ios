@@ -58,6 +58,9 @@ public:
   // Clears the per-frame press/release edge latches. Must be called exactly
   // once per frame (before the firmware's loop()), NOT on every update().
   void beginFrame();
+  // True between SDL_APP_WILLENTERBACKGROUND and SDL_APP_DIDENTERFOREGROUND.
+  // iOS terminates an app that draws or burns CPU while backgrounded.
+  bool isBackgrounded() const;
 
   // Button input methods
   void update();

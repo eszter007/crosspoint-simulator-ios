@@ -1,4 +1,5 @@
 #include "HalDisplay.h"
+#include "SimulatorOnScreenControls.h"
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
@@ -248,6 +249,11 @@ static void getLogicalWindowSize(GfxRenderer::Orientation orientation,
   *height =
       (isPortrait ? HalDisplay::DISPLAY_WIDTH : HalDisplay::DISPLAY_HEIGHT) *
       SIMULATOR_WINDOW_SCALE;
+  // The on-screen key strip lives below the panel, in the same logical space.
+  // The panel keeps its own coordinates unchanged -- every dst rect below is
+  // computed from DISPLAY_WIDTH/HEIGHT, not from the window -- so nothing in
+  // the panel path has to know the window grew.
+  *height += SimulatorOnScreenControls::stripHeight();
 }
 
 static void applyWindowGeometryIfNeeded(GfxRenderer::Orientation orientation) {
@@ -260,7 +266,11 @@ static void applyWindowGeometryIfNeeded(GfxRenderer::Orientation orientation) {
   if (winW == currentWindowWidth && winH == currentWindowHeight)
     return;
 
+#if !defined(SIMULATOR_IOS)
+  // On iOS the window is the whole screen and must not be resized to the
+  // panel's logical size; only the logical space follows the orientation.
   SDL_SetWindowSize(window, winW, winH);
+#endif
   SDL_RenderSetLogicalSize(sdl_renderer, winW, winH);
   currentWindowWidth = winW;
   currentWindowHeight = winH;
@@ -313,16 +323,31 @@ void HalDisplay::begin() {
 
   // SDL_WINDOW_ALLOW_HIGHDPI lets the renderer use full Retina/HiDPI pixels on
   // macOS so we get crisp 1:1 rendering instead of a blurry upscale.
+  Uint32 windowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
+#if defined(SIMULATOR_IOS)
+  // Fill the screen. SDL_RenderSetLogicalSize below keeps the panel's own
+  // coordinate space and letterboxes it into whatever the device gives us, so
+  // the rest of the display path is unchanged.
+  windowFlags |= SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS;
+  SDL_DisplayMode mode;
+  if (SDL_GetCurrentDisplayMode(0, &mode) == 0) {
+    winW = mode.w;
+    winH = mode.h;
+  }
+#endif
   window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED,
-                            SDL_WINDOWPOS_UNDEFINED, winW, winH,
-                            SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+                            SDL_WINDOWPOS_UNDEFINED, winW, winH, windowFlags);
   sdl_renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
-  // Keep all rendering logic in logical (winW×winH) coordinates; SDL maps to
-  // drawable pixels.
-  SDL_RenderSetLogicalSize(sdl_renderer, winW, winH);
-  currentWindowWidth = winW;
-  currentWindowHeight = winH;
+  // Keep all rendering logic in logical coordinates; SDL maps to drawable
+  // pixels. Re-read rather than reusing winW/winH, which on iOS now hold the
+  // screen size: the logical space must stay the panel's.
+  int logicalW = 0;
+  int logicalH = 0;
+  getLogicalWindowSize(renderer.getOrientation(), &logicalW, &logicalH);
+  SDL_RenderSetLogicalSize(sdl_renderer, logicalW, logicalH);
+  currentWindowWidth = logicalW;
+  currentWindowHeight = logicalH;
 
   // Linear filtering: Bayer-dithered pixels average to correct gray at scaled
   // sizes rather than showing harsh black/white patterns.
@@ -475,8 +500,20 @@ void HalDisplay::presentIfNeeded() {
   if (screenshotDue) {
     captureDueScreenshots();
   }
+
+  // After the screenshot capture, so a saved frame holds the panel alone and
+  // not the simulator's own chrome.
+  {
+    int winW = 0;
+    int winH = 0;
+    getLogicalWindowSize(orientation, &winW, &winH);
+    SimulatorOnScreenControls::render(sdl_renderer, winW, winH);
+  }
+
   SDL_RenderPresent(sdl_renderer);
 }
+
+void HalDisplay::requestPresent() { pendingPresent.store(true); }
 
 bool HalDisplay::shouldQuit() const { return quitRequested.load(); }
 

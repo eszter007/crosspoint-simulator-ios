@@ -1,5 +1,9 @@
 
 #include <SDL.h>
+// Renames main() to SDL_main on the platforms that need SDL to own the real
+// entry point -- iOS, where SDL2main stands up UIApplication first. Inert
+// elsewhere.
+#include <SDL_main.h>
 #include <unistd.h>
 
 #include "Arduino.h"
@@ -15,6 +19,14 @@ int main(int argc, char **argv) {
   SimulatorLifecycle::initProcessArgs(argv);
   setup();
   while (!display.shouldQuit()) {
+    // Backgrounded on iOS: block instead of running the firmware and drawing.
+    // A background app that draws or burns CPU is one iOS terminates. The
+    // wait also parks the loop until something wakes it, which is the closest
+    // analogue to the device being asleep.
+    if (gpio.isBackgrounded()) {
+      SDL_WaitEventTimeout(nullptr, 200);
+      continue;
+    }
     // Clear input edge latches once per frame. update() may be called many
     // times within loop(); edges must survive across those calls and only
     // reset here at the frame boundary.

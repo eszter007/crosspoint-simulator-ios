@@ -1,4 +1,16 @@
-# CrossPoint Simulator
+# CrossPoint Simulator — with an iPhone build
+
+A fork of [crosspoint-reader/crosspoint-simulator](https://github.com/crosspoint-reader/crosspoint-simulator)
+that additionally builds as an **iOS app**, so the simulator runs on an iPhone
+with the panel taking real touch input. It is aimed at the **Xteink X4 Pro**,
+whose real input is a touch panel and a capacitive Home key.
+
+Everything upstream does is unchanged: the PlatformIO desktop path, the device
+and panel-controller envs, and the simulator's own HAL all work exactly as
+before. The iOS build lives in [`ios/`](ios/README.md) and is additive —
+PlatformIO has no iOS platform, so it needs its own (CMake) build.
+
+---
 
 A desktop simulator for [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader)-based firmware. Compiles the firmware natively and renders the e-ink display in an SDL2 window. No device required. Can be used with forks of Crosspoint but any new methods added to the firmware will need to be stubbed. If your fork diverges from the CrossPoint HAL, see [FORKING.md](FORKING.md).
 

@@ -1,4 +1,6 @@
 #include "HalGPIO.h"
+#include "SimulatorInput.h"
+#include "SimulatorOnScreenControls.h"
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
@@ -14,6 +16,12 @@
 #include <vector>
 
 #include "HalDisplay.h"
+
+// File scope on purpose: used from namespace SimulatorInput below, where a
+// local extern would declare SimulatorInput::display instead.
+extern HalDisplay display; // defined in the firmware's main.cpp
+
+static std::atomic<bool> backgrounded{false};
 #include "SimulatorLifecycle.h"
 
 // Defined in HalDisplay.cpp — set here so all SDL event polling lives in one
@@ -382,6 +390,19 @@ void initializeSyntheticEvents() {
             });
 }
 
+// --- live injection (on-screen key strip) ------------------------------------
+
+unsigned long inputFrameCounter = 0;
+unsigned long buttonDownFrame[NUM_BUTTONS] = {};
+bool buttonReleasePending[NUM_BUTTONS] = {};
+bool homeKeyDownThisFrame = false;
+bool homeKeyReleasePending = false;
+
+void applyButtonUp(int buttonIndex) {
+  releasedThisFrame[buttonIndex] = true;
+  syntheticButtonDown[buttonIndex] = false;
+}
+
 void processSyntheticEvents() {
   initializeSyntheticEvents();
   const unsigned long now = millis();
@@ -425,6 +446,72 @@ void processSyntheticEvents() {
 }
 
 } // namespace
+
+namespace SimulatorInput {
+
+void buttonDown(const int buttonIndex) {
+  if (buttonIndex < 0 || buttonIndex >= NUM_BUTTONS)
+    return;
+  pressedThisFrame[buttonIndex] = true;
+  syntheticButtonDown[buttonIndex] = true;
+  // SDL_GetTicks(), matching real key events: held-time maths mixes the two.
+  buttonPressTime[buttonIndex] = SDL_GetTicks();
+  buttonDownFrame[buttonIndex] = inputFrameCounter;
+  buttonReleasePending[buttonIndex] = false;
+}
+
+void buttonUp(const int buttonIndex) {
+  if (buttonIndex < 0 || buttonIndex >= NUM_BUTTONS)
+    return;
+  if (buttonDownFrame[buttonIndex] == inputFrameCounter) {
+    // Pressed and released inside one frame. Hold the release back so the
+    // firmware sees a press frame first; tick() delivers it next frame.
+    buttonReleasePending[buttonIndex] = true;
+    return;
+  }
+  applyButtonUp(buttonIndex);
+}
+
+void homeKey(const bool down) {
+  if (down) {
+    beginHomeKey();
+    homeKeyDownThisFrame = true;
+    homeKeyReleasePending = false;
+    return;
+  }
+  if (homeKeyDownThisFrame) {
+    homeKeyReleasePending = true;
+    return;
+  }
+  endHomeKey();
+}
+
+void tick() {
+  bool released = false;
+  for (int i = 0; i < NUM_BUTTONS; i++) {
+    if (buttonReleasePending[i]) {
+      buttonReleasePending[i] = false;
+      applyButtonUp(i);
+      released = true;
+    }
+  }
+  if (homeKeyReleasePending) {
+    homeKeyReleasePending = false;
+    endHomeKey();
+    released = true;
+  }
+  homeKeyDownThisFrame = false;
+  inputFrameCounter++;
+
+  // A deferred release lands a frame after the press, and the panel is e-ink:
+  // nothing repaints unless something asks. Without this the on-screen key
+  // keeps its pressed highlight until an unrelated redraw comes along.
+  if (released) {
+    display.requestPresent();
+  }
+}
+
+} // namespace SimulatorInput
 
 static void clearButtonState() {
   for (int i = 0; i < NUM_BUTTONS; i++) {
@@ -503,6 +590,10 @@ void HalGPIO::beginFrame() {
   homeKeyPressedThisFrame = false;
   homeKeyTappedThisFrame = false;
   homeKeyLongPressedThisFrame = false;
+  // After the clear, not before: tick() delivers a release held back from the
+  // previous frame by setting its edge, and clearing afterwards would wipe the
+  // very edge it just raised.
+  SimulatorInput::tick();
 }
 
 void HalGPIO::update() {
@@ -522,6 +613,10 @@ void HalGPIO::update() {
   while (SDL_PollEvent(&e) != 0) {
     if (e.type == SDL_QUIT) {
       quitRequested.store(true);
+    } else if (e.type == SDL_APP_WILLENTERBACKGROUND) {
+      backgrounded.store(true);
+    } else if (e.type == SDL_APP_DIDENTERFOREGROUND) {
+      backgrounded.store(false);
     } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
       if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
         beginHomeKey();
@@ -547,6 +642,13 @@ void HalGPIO::update() {
       }
     } else if (e.type == SDL_MOUSEBUTTONDOWN &&
                e.button.button == SDL_BUTTON_LEFT) {
+      // The on-screen key strip sits below the panel in the same logical
+      // space, so it gets first refusal on a press. Anything it takes must not
+      // also become a panel touch: the panel's normalisation clamps to 0..1,
+      // which would land a strip tap on the panel's bottom edge.
+      if (SimulatorOnScreenControls::handlePress(e.button.x, e.button.y)) {
+        continue;
+      }
       const float logicalNx =
           static_cast<float>(e.button.x) /
           std::max(1, static_cast<int>(renderer.getScreenWidth()) - 1);
@@ -554,7 +656,8 @@ void HalGPIO::update() {
           static_cast<float>(e.button.y) /
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
       beginTouch(logicalNx, logicalNy);
-    } else if (e.type == SDL_MOUSEMOTION && touchState.down) {
+    } else if (e.type == SDL_MOUSEMOTION &&
+               !SimulatorOnScreenControls::capturing() && touchState.down) {
       const float logicalNx =
           static_cast<float>(e.motion.x) /
           std::max(1, static_cast<int>(renderer.getScreenWidth()) - 1);
@@ -564,6 +667,9 @@ void HalGPIO::update() {
       moveTouch(logicalNx, logicalNy);
     } else if (e.type == SDL_MOUSEBUTTONUP &&
                e.button.button == SDL_BUTTON_LEFT) {
+      if (SimulatorOnScreenControls::handleRelease()) {
+        continue;
+      }
       const float logicalNx =
           static_cast<float>(e.button.x) /
           std::max(1, static_cast<int>(renderer.getScreenWidth()) - 1);
@@ -577,6 +683,8 @@ void HalGPIO::update() {
   updateTouchHold();
   updateHomeKeyHold();
 }
+
+bool HalGPIO::isBackgrounded() const { return backgrounded.load(); }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const {
   if (buttonIndex >= NUM_BUTTONS)

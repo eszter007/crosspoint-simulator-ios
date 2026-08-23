@@ -89,6 +89,11 @@ public:
 
   // Simulator only: call from main thread to push rendered pixels to SDL.
   void presentIfNeeded();
+  // Ask for a present without the firmware having drawn anything. The panel is
+  // e-ink: it only repaints when the firmware asks, so simulator chrome drawn
+  // over it (the on-screen key strip) would otherwise hold a stale pressed
+  // highlight until the next unrelated redraw.
+  void requestPresent();
   // Simulator only: returns true once a hard shutdown has been requested.
   bool shouldQuit() const;
 

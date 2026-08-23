@@ -1,0 +1,3 @@
+# CMake build trees for the iOS/desktop build in ios/ (see ios/README.md).
+build/
+build-*/
