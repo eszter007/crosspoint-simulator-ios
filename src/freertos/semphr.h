@@ -38,6 +38,10 @@ inline bool xSemaphoreGive(SemaphoreHandle_t sem) {
   return true;
 }
 
+// Destroy a semaphore. Callers only delete one they own and are done with, so
+// the mutex is not held here.
+inline void vSemaphoreDelete(SemaphoreHandle_t sem) { delete sem; }
+
 inline TaskHandle_t xSemaphoreGetMutexHolder(SemaphoreHandle_t sem) {
   return sem ? sem->holder : nullptr;
 }
