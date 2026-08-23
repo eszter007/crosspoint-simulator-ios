@@ -97,12 +97,48 @@ change here.
 
 ## Getting books onto it
 
+Two routes, and one that does not work — see below on File Transfer.
+
+### 1. Drop them in the Files app (default, nothing to configure)
+
 The app's Documents directory *is* the SD card. `UIFileSharingEnabled` and
 `LSSupportsOpeningDocumentsInPlace` are set, so it appears in the Files app under
 **On My iPhone → CrossPoint**, and in Finder's Files tab when the phone is
-plugged in. Drop `.epub` files straight in.
+plugged in. Drop `.epub` files straight in — a whole folder of them at once is
+fine.
 
-`CROSSPOINT_SIM_SD` still wins where it is set, so desktop runs are unaffected.
+### 2. Point it at a folder you already have
+
+The **folder key** at the left of the on-screen strip opens the system folder
+picker. Choose any folder Files can reach — iCloud Drive, a USB drive, another
+app's shared folder — and the simulated SD card becomes that folder, in place.
+Nothing is copied.
+
+The choice is kept as a security-scoped bookmark, so it survives relaunches
+without asking again. It takes effect immediately: the storage root is re-read
+on every path resolution, so no restart is needed, though the library screen
+needs revisiting to re-scan. If the folder later disappears (deleted, or on a
+drive that is no longer attached) the simulator falls back to Documents.
+
+`CROSSPOINT_SIM_SD` still wins over both where it is set, so desktop runs are
+unaffected. The folder key only appears where the platform has a picker, so the
+desktop strip is unchanged.
+
+### Why not File Transfer?
+
+The firmware's File Transfer screen runs a web server, and it does start under
+iOS — in the simulator it runs on its own thread rather than being driven by the
+firmware loop, so it is not affected by the app pausing in the background.
+
+It is still not a usable route on a phone. The server binds to loopback only
+(`127.0.0.1`), so nothing else on the network can reach it; the only browser
+that can is Safari on the same phone, and switching to Safari backgrounds the
+simulator, which iOS suspends within seconds. Reaching it from a laptop would
+need the server bound to all interfaces and an `NSLocalNetworkUsageDescription`
+prompt, which is a change to the simulator's deliberate loopback sandbox rather
+than an iOS detail.
+
+The Files app and the folder picker both do the job without any of that.
 
 ## On-screen keys
 

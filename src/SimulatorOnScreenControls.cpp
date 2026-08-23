@@ -9,6 +9,7 @@
 #include <cstdlib>
 
 #include "SimulatorInput.h"
+#include "SimulatorPlatform.h"
 
 extern HalDisplay display; // defined in the firmware's main.cpp
 
@@ -18,8 +19,12 @@ namespace {
 // HOME_KEY is not a HalGPIO button: the capacitive Home key is reported by the
 // touch controller, so it goes in through SimulatorInput::homeKey().
 constexpr int HOME_KEY = -2;
+// Not a device key at all: the simulator's own control for choosing which
+// folder the simulated SD card lives in. Only offered where the platform has a
+// folder picker (iOS), and drawn set apart from the hardware keys.
+constexpr int PICK_FOLDER = -3;
 
-enum class Glyph { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Confirm, Back, Power, Home };
+enum class Glyph { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Confirm, Back, Power, Home, Folder };
 
 struct Control {
   int button;
@@ -57,6 +62,10 @@ void build() {
   if (built)
     return;
   built = true;
+
+  if (simPlatformCanPickFolder()) {
+    add(PICK_FOLDER, Glyph::Folder);
+  }
 
   if (BoardConfig::hasTouch()) {
     add(HalGPIO::BTN_UP, Glyph::ChevronUp);
@@ -151,12 +160,23 @@ void drawGlyph(SDL_Renderer *r, const Glyph glyph, const SDL_Rect &rect) {
   case Glyph::Home:
     drawArc(r, cx, cy, s, 0, 360, th);
     break;
+  case Glyph::Folder:
+    // Folder outline: back edge, tab, and body.
+    drawThickLine(r, cx - s, cy + s * 2 / 3, cx - s, cy - s * 2 / 3, th);
+    drawThickLine(r, cx - s, cy - s * 2 / 3, cx - s / 6, cy - s * 2 / 3, th);
+    drawThickLine(r, cx - s / 6, cy - s * 2 / 3, cx + s / 6, cy - s / 3, th);
+    drawThickLine(r, cx + s / 6, cy - s / 3, cx + s, cy - s / 3, th);
+    drawThickLine(r, cx + s, cy - s / 3, cx + s, cy + s * 2 / 3, th);
+    drawThickLine(r, cx + s, cy + s * 2 / 3, cx - s, cy + s * 2 / 3, th);
+    break;
   }
 }
 
 bool isDown(const Control &c) {
-  if (c.button == HOME_KEY)
-    return captured >= 0 && controls[captured].button == HOME_KEY;
+  // The two non-device controls have no button state to read; they look pressed
+  // only while the finger is on them.
+  if (c.button < 0)
+    return captured >= 0 && controls[captured].button == c.button;
   return gpio.isPressed(static_cast<uint8_t>(c.button));
 }
 
@@ -242,7 +262,7 @@ bool handlePress(const int logicalX, const int logicalY) {
     captured = i;
     if (controls[i].button == HOME_KEY) {
       SimulatorInput::homeKey(true);
-    } else {
+    } else if (controls[i].button != PICK_FOLDER) {
       SimulatorInput::buttonDown(controls[i].button);
     }
     display.requestPresent();
@@ -257,6 +277,9 @@ bool handleRelease() {
   const Control &c = controls[captured];
   if (c.button == HOME_KEY) {
     SimulatorInput::homeKey(false);
+  } else if (c.button == PICK_FOLDER) {
+    // On release, so a press that slides off does not open the picker.
+    simPlatformPickFolder();
   } else {
     SimulatorInput::buttonUp(c.button);
   }

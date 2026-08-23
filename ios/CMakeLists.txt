@@ -318,7 +318,9 @@ endif()
 # --- iOS app bundle ------------------------------------------------------------
 if(CROSSPOINT_IOS)
   target_compile_definitions(crosspoint_simulator PRIVATE SIMULATOR_IOS=1)
-  target_link_libraries(crosspoint_simulator PRIVATE "-framework UIKit" "-framework Foundation")
+  # UniformTypeIdentifiers supplies UTTypeFolder for the folder picker.
+  target_link_libraries(crosspoint_simulator PRIVATE
+    "-framework UIKit" "-framework Foundation" "-framework UniformTypeIdentifiers")
 
   set_source_files_properties(${IOS_RESOURCES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
   set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.crosspoint.simulator" CACHE STRING "iOS bundle identifier")
@@ -330,7 +332,7 @@ if(CROSSPOINT_IOS)
   set_target_properties(crosspoint_simulator PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"        # iPhone and iPad
-    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "13.0"   # UIScene safe-area API
+    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "14.0"   # UTType + folder picker API
     XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
     XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES"
   )
