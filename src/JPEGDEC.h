@@ -19,6 +19,17 @@
 
 #include "SimulatorImageDecode.h"
 
+// Result codes, matching bitbank2/JPEGDEC's enum and its ordering. Firmware
+// maps these to human-readable text, so a decoder that never returns anything
+// but success still has to name them.
+enum {
+  JPEG_SUCCESS = 0,
+  JPEG_INVALID_PARAMETER,
+  JPEG_DECODE_ERROR,
+  JPEG_UNSUPPORTED_FEATURE,
+  JPEG_INVALID_FILE,
+};
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>

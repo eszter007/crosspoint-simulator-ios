@@ -40,6 +40,9 @@ public:
 
   int GET() { return http_.GET(); }
   int POST(const String &payload) { return http_.POST(payload.c_str()); }
+  // The SDK declares POST on std::string; begin(), addHeader() and
+  // sendRequest() already carry the matching overload and this one was missed.
+  int POST(const std::string &payload) { return http_.POST(payload.c_str()); }
   int sendRequest(const char *method, const String &payload) {
     if (method && std::string(method) == "PUT") {
       return http_.PUT(payload);
@@ -53,7 +56,14 @@ public:
     return sendRequest(method, String(payload));
   }
 
-  String getString() { return http_.getString(); }
+  // The SDK returns `const std::string&`, and firmware binds the result
+  // straight to a std::string. Cached in a member because the Arduino-style
+  // client hands back a String by value, and a reference to that temporary
+  // would dangle.
+  const std::string &getString() {
+    body_ = http_.getString().c_str();
+    return body_;
+  }
   int getSize() { return http_.getSize(); }
 
   static bool tls13Available() { return true; }
@@ -61,6 +71,7 @@ public:
 private:
   NetworkClientSecure client_;
   HTTPClient http_;
+  std::string body_;
 };
 
 } // namespace freeink

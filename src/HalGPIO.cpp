@@ -686,6 +686,25 @@ void HalGPIO::update() {
 
 bool HalGPIO::isBackgrounded() const { return backgrounded.load(); }
 
+bool HalGPIO::anyButtonDownRaw() {
+  // Reads button level rather than the per-frame edge latches, which is the
+  // point of the call: the firmware uses it from long background work that
+  // never reaches a frame boundary, to notice a press and bail out.
+  //
+  // Deliberately does NOT pump SDL. update() owns the event pump, and this runs
+  // on whatever task the background work is on -- pumping from there would both
+  // break that ownership and call SDL off the main thread. The keyboard state
+  // SDL already maintains is what the last pump saw, which is exactly the
+  // "is a button down right now" answer the caller wants.
+  const uint8_t *keys = SDL_GetKeyboardState(NULL);
+  for (int i = 0; i < NUM_BUTTONS; i++) {
+    if (keys[buttonScancode[i]] || syntheticButtonDown[i]) {
+      return true;
+    }
+  }
+  return touchState.down;
+}
+
 bool HalGPIO::isPressed(uint8_t buttonIndex) const {
   if (buttonIndex >= NUM_BUTTONS)
     return false;

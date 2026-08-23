@@ -70,6 +70,35 @@ inline void xTaskNotify(TaskHandle_t handle, uint32_t /*value*/,
   handle->cv.notify_one();
 }
 
+// Increment a task's notification counter and wake it -- xTaskNotify with
+// eIncrement under another name, which FreeRTOS also provides.
+inline BaseType_t xTaskNotifyGive(TaskHandle_t handle) {
+  if (!handle)
+    return pdFALSE;
+  xTaskNotify(handle, 0, eIncrement);
+  return pdTRUE;
+}
+
+// Clear bits in a task's notification value and return its PREVIOUS value.
+// handle == nullptr means the calling task.
+//
+// Callers pass zero bits to read the value with no side effects, which is the
+// only side-effect-free read FreeRTOS offers (xTaskNotifyAndQuery stamps the
+// notification state even with eNoAction). Here the notification "value" is the
+// pending-notification counter, so a caller testing `> 0` for a queued wake-up
+// gets the answer it expects. ~0u clears everything, as on the real API.
+inline uint32_t ulTaskNotifyValueClear(TaskHandle_t handle,
+                                       uint32_t bitsToClear) {
+  if (!handle)
+    handle = xTaskGetCurrentTaskHandle();
+  if (!handle)
+    return 0;
+  std::lock_guard<std::mutex> lk(handle->mtx);
+  const uint32_t previous = handle->notifyCount;
+  handle->notifyCount &= ~bitsToClear;
+  return previous;
+}
+
 inline const char *pcTaskGetName(TaskHandle_t h) {
   if (!h)
     h = xTaskGetCurrentTaskHandle();

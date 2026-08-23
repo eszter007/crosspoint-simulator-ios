@@ -68,6 +68,33 @@ CROSSPOINT_SIM_SD=./fs_ CROSSPOINT_SIM_CONTROLS=1 ./build/crosspoint_simulator
 This is a convenience, not a replacement: PlatformIO remains the supported
 desktop path.
 
+## Firmware forks
+
+The simulator replaces the firmware's HAL, so it is tied to one firmware's HAL
+by construction — see [FORKING.md](../FORKING.md). This fork additionally builds
+against [matcha-reader](https://github.com/eszter007/matcha-reader), a
+Japanese-enabled CrossPoint fork:
+
+```sh
+cmake -S ios -B build-matcha -DCROSSPOINT_FIRMWARE_ROOT=../matcha-reader
+cmake --build build-matcha
+```
+
+What that needed, for reference if you carry another fork:
+
+- **Matcha's HAL additions**, stubbed to match its signatures:
+  `HalGPIO::anyButtonDownRaw`, `HalClock::systemTimeValid` /
+  `restoreSystemTime` / `persistSystemTime` / `localEpoch`, and
+  `HalFile::modifiedStamp`.
+- **Gaps in the platform emulation layer**, which are not fork-specific and
+  would be worth sending upstream: `pdPASS`, `xTaskNotifyGive`,
+  `ulTaskNotifyValueClear`, `vSemaphoreDelete`, the `JPEGDEC` result enum, and
+  `SecureHttpClient`'s `std::string` `POST`/`getString` signatures, which had
+  drifted from the SDK's.
+
+Both firmwares build and run from the same tree; upstream is checked on every
+change here.
+
 ## Getting books onto it
 
 The app's Documents directory *is* the SD card. `UIFileSharingEnabled` and

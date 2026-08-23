@@ -120,3 +120,26 @@ bool HalClock::formatDate(char *buf, size_t bufSize,
 }
 
 bool HalClock::syncFromNTP() { return _available; }
+
+bool HalClock::systemTimeValid() {
+  // The device compares against the firmware build date to tell "RTC never set"
+  // from a real time. A host clock is always set, so there is nothing to detect.
+  return true;
+}
+
+void HalClock::restoreSystemTime() const {
+  // No-op: nothing to restore, the host clock is already right.
+}
+
+void HalClock::persistSystemTime() const {
+  // No-op: the device stashes the epoch to survive a power cut, which the host
+  // clock does not need.
+}
+
+time_t HalClock::localEpoch(uint8_t utcOffsetQuarterHoursBiased) {
+  if (utcOffsetQuarterHoursBiased > 104) {
+    utcOffsetQuarterHoursBiased = 104; // same clamp as formatTime
+  }
+  const int offsetQuarterHours = static_cast<int>(utcOffsetQuarterHoursBiased) - 48;
+  return std::time(nullptr) + static_cast<time_t>(offsetQuarterHours) * 15 * 60;
+}

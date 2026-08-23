@@ -3,6 +3,8 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+
+#include <ctime>
 #include <unistd.h>
 
 #include <cerrno>
@@ -176,6 +178,31 @@ size_t HalFile::size() {
   lseek(impl->fd, cur, SEEK_SET);
   return end < 0 ? 0 : (size_t)end;
 }
+uint32_t HalFile::modifiedStamp() {
+  if (!impl || impl->fd < 0)
+    return 0;
+  struct stat st;
+  if (fstat(impl->fd, &st) != 0)
+    return 0;
+
+  // Packed as SdFat reports it, so the firmware's change comparison behaves the
+  // same here as on a card. FAT stores dates from 1980 and seconds in 2-second
+  // units, so two writes inside the same 2-second window look identical -- true
+  // on the device too, which is what makes this a faithful stand-in.
+  std::tm tm{};
+  const std::time_t mtime = st.st_mtime;
+  if (localtime_r(&mtime, &tm) == nullptr)
+    return 0;
+  if (tm.tm_year + 1900 < 1980)
+    return 0; // predates the FAT epoch; no representable stamp
+
+  const uint16_t date = static_cast<uint16_t>(((tm.tm_year + 1900 - 1980) << 9) |
+                                              ((tm.tm_mon + 1) << 5) | tm.tm_mday);
+  const uint16_t time = static_cast<uint16_t>((tm.tm_hour << 11) | (tm.tm_min << 5) |
+                                              (tm.tm_sec / 2));
+  return (static_cast<uint32_t>(date) << 16) | time;
+}
+
 size_t HalFile::fileSize() { return size(); }
 uint64_t HalFile::fileSize64() { return size(); }
 bool HalFile::seek(size_t pos) {

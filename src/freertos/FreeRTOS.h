@@ -5,6 +5,7 @@
 
 #define pdTRUE 1
 #define pdFALSE 0
+#define pdPASS 1
 #define portMAX_DELAY 0xFFFFFFFF
 #define eIncrement 1
 #define portTICK_PERIOD_MS 1
