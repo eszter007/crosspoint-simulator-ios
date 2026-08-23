@@ -244,15 +244,23 @@ set(FIRMWARE_INCLUDES
   "${ARDUINOJSON_DIR}/src"
   "${ANIMATEDGIF_DIR}/src"
 )
-file(GLOB FIRMWARE_LIB_DIRS LIST_DIRECTORIES true "${CROSSPOINT_FIRMWARE_ROOT}/lib/*")
-foreach(dir ${FIRMWARE_LIB_DIRS})
-  if(IS_DIRECTORY "${dir}")
-    list(APPEND FIRMWARE_INCLUDES "${dir}")
-    if(IS_DIRECTORY "${dir}/src")
-      list(APPEND FIRMWARE_INCLUDES "${dir}/src")
-    endif()
-  endif()
+# Every directory inside a firmware library that holds a header goes on the
+# include path, not just the library root. PlatformIO's dependency finder does
+# the same at lib_ldf_mode = deep+, and firmware code relies on it: a source in
+# lib/Epub/Epub/blocks/ includes "Kinsoku.h" from lib/Epub/Epub/, which a
+# roots-only path cannot resolve.
+file(GLOB_RECURSE FIRMWARE_HEADERS
+  "${CROSSPOINT_FIRMWARE_ROOT}/lib/*.h"
+  "${CROSSPOINT_FIRMWARE_ROOT}/lib/*.hpp")
+set(FIRMWARE_HEADER_DIRS)
+foreach(header ${FIRMWARE_HEADERS})
+  get_filename_component(header_dir "${header}" DIRECTORY)
+  list(APPEND FIRMWARE_HEADER_DIRS "${header_dir}")
 endforeach()
+list(REMOVE_DUPLICATES FIRMWARE_HEADER_DIRS)
+# lib/hal is replaced by the simulator's own HAL and must not shadow it.
+list(FILTER FIRMWARE_HEADER_DIRS EXCLUDE REGEX "${CROSSPOINT_FIRMWARE_ROOT}/lib/hal(/.*)?$")
+list(APPEND FIRMWARE_INCLUDES ${FIRMWARE_HEADER_DIRS})
 file(GLOB SDK_INCLUDE_DIRS "${FREEINK_SDK_ROOT}/libs/*/*/include")
 list(APPEND FIRMWARE_INCLUDES ${SDK_INCLUDE_DIRS})
 
