@@ -260,6 +260,14 @@ endforeach()
 list(REMOVE_DUPLICATES FIRMWARE_HEADER_DIRS)
 # lib/hal is replaced by the simulator's own HAL and must not shadow it.
 list(FILTER FIRMWARE_HEADER_DIRS EXCLUDE REGEX "${CROSSPOINT_FIRMWARE_ROOT}/lib/hal(/.*)?$")
+# lib/Epub/Epub/blocks/ holds a Block.h, which shadows the Objective-C blocks
+# runtime header of that name when UIKit pulls it in. Nothing needs the
+# directory on the path: every reference to its headers is quoted, so it
+# resolves relative to the including file.
+# ponytail: one name, excluded by hand. If a second firmware header ever
+# collides with an SDK one, compile the Objective-C sources in a separate
+# target that carries no firmware includes.
+list(FILTER FIRMWARE_HEADER_DIRS EXCLUDE REGEX "${CROSSPOINT_FIRMWARE_ROOT}/lib/Epub/Epub/blocks$")
 list(APPEND FIRMWARE_INCLUDES ${FIRMWARE_HEADER_DIRS})
 file(GLOB SDK_INCLUDE_DIRS "${FREEINK_SDK_ROOT}/libs/*/*/include")
 list(APPEND FIRMWARE_INCLUDES ${SDK_INCLUDE_DIRS})
@@ -332,7 +340,15 @@ if(CROSSPOINT_IOS)
   set_target_properties(crosspoint_simulator PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"        # iPhone and iPad
-    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "14.0"   # UTType + folder picker API
+    # 14.0 covers the UTType and folder picker APIs this app calls directly.
+    # 26.0 is forced by the firmware: CssParser uses the floating-point
+    # std::from_chars, which lives in the libc++ dylib and is annotated
+    # unavailable before iOS 26.
+    # ponytail: raising the floor is one line against rewriting a hot parser.
+    # If this has to run on an older iPhone, give tryParseNumber a bounded
+    # strtod path for floating-point T instead -- from_chars takes an end
+    # pointer, strtod does not, so it needs a stack copy of the token.
+    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "26.0"
     XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
     XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES"
   )
