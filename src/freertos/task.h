@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <cstdint>
 
 #include "FreeRTOS.h"
@@ -113,4 +114,7 @@ inline void vTaskDelete(TaskHandle_t h) {
 }
 inline unsigned int uxTaskGetStackHighWaterMark(TaskHandle_t) { return 2048; }
 inline void vTaskList(char *) {}
-inline void vTaskDelay(int) {}
+inline void vTaskDelay(int ticks) {
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(ticks * portTICK_PERIOD_MS));
+}

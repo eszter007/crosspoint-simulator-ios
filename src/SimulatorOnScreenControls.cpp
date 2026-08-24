@@ -184,7 +184,7 @@ bool isDown(const Control &c) {
 
 bool enabled() {
 #if defined(SIMULATOR_IOS)
-  return true;
+  return false; // SwiftUI supplies the iPhone controls.
 #else
   static const bool on = std::getenv("CROSSPOINT_SIM_CONTROLS") != nullptr;
   return on;

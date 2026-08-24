@@ -22,6 +22,9 @@ void simPlatformPickFolder(void);
 // whether to offer the control at all.
 bool simPlatformCanPickFolder(void);
 
+// Add the native iOS controls above the SDL view. No-op on desktop.
+void simPlatformInstallControls(void);
+
 #ifdef __cplusplus
 }
 #endif

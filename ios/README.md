@@ -143,8 +143,8 @@ The Files app and the folder picker both do the job without any of that.
 ## On-screen keys
 
 A phone has no keyboard, and on a touch board the panel is already an input
-surface — so the simulator draws the board's remaining keys in a strip below the
-panel. What appears comes from the board profile:
+surface — so the simulator places native SwiftUI buttons with SF Symbols below
+the centered panel. What appears comes from the board profile:
 
 - **Touch boards** (X4 Pro, Sticky, Paper Mono) reach Back and Confirm through
   the panel, exactly as the hardware does. The strip carries only what the panel
@@ -153,7 +153,7 @@ panel. What appears comes from the board profile:
 - **Button boards** (X4, X3) have no panel to press, so the strip stands in for
   the whole keyboard mapping.
 
-The strip is always on for iOS. On desktop it is opt-in with
+The SwiftUI controls are always on for iOS. On desktop the SDL strip is opt-in with
 `CROSSPOINT_SIM_CONTROLS=1`, so the window stays exactly panel-sized by default.
 
 ## Differences from the device
@@ -164,11 +164,8 @@ The strip is always on for iOS. On desktop it is opt-in with
   HTTP client is not built there either.
 - **Wall-clock speed.** E-ink refresh timing is not simulated: pages appear
   instantly rather than taking the panel's 1–2 s.
-- **Home-indicator clearance** is a fixed 40 logical pixels below the keys
-  rather than the measured `safeAreaInsets`. The panel and strip are letterboxed
-  by SDL, so a measured inset would have to be converted through the current
-  scale, and none of that could be checked without a device. 40 covers the
-  largest indicator inset (34 pt) on every current iPhone.
+- **Controls live outside SDL.** SwiftUI positions them against the measured
+  safe area while SDL keeps the panel centered in the iPhone view.
 
 ## If the build fails
 

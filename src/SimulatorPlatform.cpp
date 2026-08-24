@@ -11,5 +11,6 @@ extern "C" const char *simPlatformDocumentsPath(void) { return nullptr; }
 // nothing a picker would add.
 extern "C" void simPlatformPickFolder(void) {}
 extern "C" bool simPlatformCanPickFolder(void) { return false; }
+extern "C" void simPlatformInstallControls(void) {}
 
 #endif

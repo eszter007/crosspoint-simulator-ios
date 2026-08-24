@@ -87,6 +87,7 @@ message(STATUS "Simulating:  ${SIMULATOR_DEVICE} (panel controller: ${SIMULATOR_
 # --- platform ------------------------------------------------------------------
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   set(CROSSPOINT_IOS TRUE)
+  enable_language(OBJCXX Swift)
 endif()
 
 # SDL2. iOS has no system SDL2 to find, so it is built from an SDL2 source
@@ -221,8 +222,12 @@ file(GLOB ANIMATEDGIF_SOURCES "${ANIMATEDGIF_DIR}/src/*.cpp")
 
 # --- target --------------------------------------------------------------------
 set(IOS_RESOURCES)
+set(IOS_SOURCES)
 if(CROSSPOINT_IOS)
   set(IOS_RESOURCES "${CMAKE_CURRENT_SOURCE_DIR}/LaunchScreen.storyboard")
+  set(IOS_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/NativeControls.swift"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SwiftControlsBridge.mm")
 endif()
 
 add_executable(crosspoint_simulator MACOSX_BUNDLE
@@ -231,6 +236,7 @@ add_executable(crosspoint_simulator MACOSX_BUNDLE
   ${FIRMWARE_LIB_SOURCES}
   ${SDK_SOURCES}
   ${ANIMATEDGIF_SOURCES}
+  ${IOS_SOURCES}
   ${IOS_RESOURCES}
 )
 
@@ -328,7 +334,8 @@ if(CROSSPOINT_IOS)
   target_compile_definitions(crosspoint_simulator PRIVATE SIMULATOR_IOS=1)
   # UniformTypeIdentifiers supplies UTTypeFolder for the folder picker.
   target_link_libraries(crosspoint_simulator PRIVATE
-    "-framework UIKit" "-framework Foundation" "-framework UniformTypeIdentifiers")
+    "-framework UIKit" "-framework SwiftUI" "-framework Foundation"
+    "-framework UniformTypeIdentifiers")
 
   set_source_files_properties(${IOS_RESOURCES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
   set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.crosspoint.simulator" CACHE STRING "iOS bundle identifier")
@@ -339,6 +346,7 @@ if(CROSSPOINT_IOS)
 
   set_target_properties(crosspoint_simulator PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${MACOSX_BUNDLE_GUI_IDENTIFIER}"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"        # iPhone and iPad
     # 14.0 covers the UTType and folder picker APIs this app calls directly.
     # 26.0 is forced by the firmware: CssParser uses the floating-point
@@ -351,5 +359,7 @@ if(CROSSPOINT_IOS)
     XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "26.0"
     XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
     XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC "YES"
+    XCODE_ATTRIBUTE_SWIFT_OBJC_BRIDGING_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/Simulator-Bridging-Header.h"
+    XCODE_ATTRIBUTE_SWIFT_VERSION "5.0"
   )
 endif()

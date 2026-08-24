@@ -36,12 +36,12 @@ int main(int argc, char **argv) {
     // The render task writes pixels and sets pendingPresent; we flush them
     // here.
     display.presentIfNeeded();
-    // Yield to the OS so macOS delivers pending keyboard/window events to SDL.
-    // Without this, the tight spin-loop starves the Cocoa event system and key
-    // presses are only picked up sporadically. 1 ms also caps the loop at ~1
-    // kHz, which matches realistic device behaviour (the real ESP32-C3 is
-    // limited by FreeRTOS tick rate and e-ink refresh time).
+    // Yield to the OS so it can deliver pending input and window events.
+#if defined(SIMULATOR_IOS)
+    SDL_Delay(16);
+#else
     SDL_Delay(1);
+#endif
   }
   SDL_Quit();
   // Use _exit() instead of return/exit() to bypass C++ global destructors.

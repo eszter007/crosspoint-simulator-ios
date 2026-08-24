@@ -84,12 +84,21 @@ struct TouchState {
 };
 
 TouchState touchState;
+SDL_FingerID activeFingerId = 0;
+bool activeFinger = false;
 bool homeKeyDown = false;
 bool homeKeyPressedThisFrame = false;
 bool homeKeyTappedThisFrame = false;
 bool homeKeyLongPressedThisFrame = false;
 bool homeKeyLongFired = false;
 unsigned long homeKeyPressedAt = 0;
+
+enum LiveInputAction : Sint32 {
+  LiveButtonDown = 1,
+  LiveButtonUp,
+  LiveHomeDown,
+  LiveHomeUp,
+};
 
 enum class SyntheticAction {
   KeyDown,
@@ -115,6 +124,34 @@ std::vector<SyntheticEvent> syntheticEvents;
 bool syntheticEventsInitialized = false;
 
 float clamp01(float value) { return std::max(0.0f, std::min(1.0f, value)); }
+
+bool fingerToLogicalNormalized(const SDL_TouchFingerEvent &finger,
+                               float &logicalNx, float &logicalNy,
+                               const bool requireInside) {
+  SDL_Window *eventWindow = SDL_GetWindowFromID(finger.windowID);
+  SDL_Renderer *eventRenderer =
+      eventWindow ? SDL_GetRenderer(eventWindow) : nullptr;
+  if (!eventWindow || !eventRenderer)
+    return false;
+
+  int windowWidth = 0;
+  int windowHeight = 0;
+  SDL_GetWindowSize(eventWindow, &windowWidth, &windowHeight);
+  float logicalX = 0.0f;
+  float logicalY = 0.0f;
+  SDL_RenderWindowToLogical(
+      eventRenderer, static_cast<int>(finger.x * std::max(0, windowWidth - 1)),
+      static_cast<int>(finger.y * std::max(0, windowHeight - 1)), &logicalX,
+      &logicalY);
+
+  const int logicalWidth = renderer.getScreenWidth();
+  const int logicalHeight = renderer.getScreenHeight();
+  const bool inside = logicalX >= 0.0f && logicalX < logicalWidth &&
+                      logicalY >= 0.0f && logicalY < logicalHeight;
+  logicalNx = clamp01(logicalX / std::max(1, logicalWidth - 1));
+  logicalNy = clamp01(logicalY / std::max(1, logicalHeight - 1));
+  return inside || !requireInside;
+}
 
 void logicalToPanelNormalized(float logicalNx, float logicalNy, float &panelNx,
                               float &panelNy) {
@@ -230,6 +267,14 @@ void endHomeKey() {
     homeKeyTappedThisFrame = true;
   }
   homeKeyDown = false;
+}
+
+void endHomeKeyAndGoHome() {
+  endHomeKey();
+  if (!homeKeyTappedThisFrame)
+    return;
+  beginTouch(0.5f, 0.95f);
+  endTouch(0.5f, 0.55f);
 }
 
 void updateHomeKeyHold() {
@@ -403,6 +448,14 @@ void applyButtonUp(int buttonIndex) {
   syntheticButtonDown[buttonIndex] = false;
 }
 
+void pushLiveInput(const LiveInputAction action, const int button = -1) {
+  SDL_Event event{};
+  event.type = SDL_USEREVENT;
+  event.user.code = action;
+  event.user.data1 = reinterpret_cast<void *>(static_cast<intptr_t>(button));
+  SDL_PushEvent(&event);
+}
+
 void processSyntheticEvents() {
   initializeSyntheticEvents();
   const unsigned long now = millis();
@@ -433,7 +486,7 @@ void processSyntheticEvents() {
       beginHomeKey();
       break;
     case SyntheticAction::HomeUp:
-      endHomeKey();
+      endHomeKeyAndGoHome();
       break;
     case SyntheticAction::Sleep:
       requestSimulatorSleep();
@@ -452,38 +505,17 @@ namespace SimulatorInput {
 void buttonDown(const int buttonIndex) {
   if (buttonIndex < 0 || buttonIndex >= NUM_BUTTONS)
     return;
-  pressedThisFrame[buttonIndex] = true;
-  syntheticButtonDown[buttonIndex] = true;
-  // SDL_GetTicks(), matching real key events: held-time maths mixes the two.
-  buttonPressTime[buttonIndex] = SDL_GetTicks();
-  buttonDownFrame[buttonIndex] = inputFrameCounter;
-  buttonReleasePending[buttonIndex] = false;
+  pushLiveInput(LiveButtonDown, buttonIndex);
 }
 
 void buttonUp(const int buttonIndex) {
   if (buttonIndex < 0 || buttonIndex >= NUM_BUTTONS)
     return;
-  if (buttonDownFrame[buttonIndex] == inputFrameCounter) {
-    // Pressed and released inside one frame. Hold the release back so the
-    // firmware sees a press frame first; tick() delivers it next frame.
-    buttonReleasePending[buttonIndex] = true;
-    return;
-  }
-  applyButtonUp(buttonIndex);
+  pushLiveInput(LiveButtonUp, buttonIndex);
 }
 
 void homeKey(const bool down) {
-  if (down) {
-    beginHomeKey();
-    homeKeyDownThisFrame = true;
-    homeKeyReleasePending = false;
-    return;
-  }
-  if (homeKeyDownThisFrame) {
-    homeKeyReleasePending = true;
-    return;
-  }
-  endHomeKey();
+  pushLiveInput(down ? LiveHomeDown : LiveHomeUp);
 }
 
 void tick() {
@@ -497,7 +529,7 @@ void tick() {
   }
   if (homeKeyReleasePending) {
     homeKeyReleasePending = false;
-    endHomeKey();
+    endHomeKeyAndGoHome();
     released = true;
   }
   homeKeyDownThisFrame = false;
@@ -521,6 +553,7 @@ static void clearButtonState() {
     syntheticButtonDown[i] = false;
   }
   touchState = {};
+  activeFinger = false;
   homeKeyDown = false;
   homeKeyPressedThisFrame = false;
   homeKeyTappedThisFrame = false;
@@ -611,7 +644,40 @@ void HalGPIO::update() {
   // split between two callers (HalDisplay::presentIfNeeded only renders).
   SDL_Event e;
   while (SDL_PollEvent(&e) != 0) {
-    if (e.type == SDL_QUIT) {
+    if (e.type == SDL_USEREVENT) {
+      const int button =
+          static_cast<int>(reinterpret_cast<intptr_t>(e.user.data1));
+      switch (e.user.code) {
+      case LiveButtonDown:
+        if (button >= 0 && button < NUM_BUTTONS) {
+          pressedThisFrame[button] = true;
+          syntheticButtonDown[button] = true;
+          buttonPressTime[button] = SDL_GetTicks();
+          buttonDownFrame[button] = inputFrameCounter;
+          buttonReleasePending[button] = false;
+        }
+        break;
+      case LiveButtonUp:
+        if (button >= 0 && button < NUM_BUTTONS) {
+          if (buttonDownFrame[button] == inputFrameCounter)
+            buttonReleasePending[button] = true;
+          else
+            applyButtonUp(button);
+        }
+        break;
+      case LiveHomeDown:
+        beginHomeKey();
+        homeKeyDownThisFrame = true;
+        homeKeyReleasePending = false;
+        break;
+      case LiveHomeUp:
+        if (homeKeyDownThisFrame)
+          homeKeyReleasePending = true;
+        else
+          endHomeKeyAndGoHome();
+        break;
+      }
+    } else if (e.type == SDL_QUIT) {
       quitRequested.store(true);
     } else if (e.type == SDL_APP_WILLENTERBACKGROUND) {
       backgrounded.store(true);
@@ -633,14 +699,36 @@ void HalGPIO::update() {
       }
     } else if (e.type == SDL_KEYUP) {
       if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
-        endHomeKey();
+        endHomeKeyAndGoHome();
         continue;
       }
       int btn = scancodeToButton(e.key.keysym.scancode);
       if (btn >= 0) {
         releasedThisFrame[btn] = true;
       }
+    } else if (e.type == SDL_FINGERDOWN && !activeFinger) {
+      float logicalNx = 0.0f;
+      float logicalNy = 0.0f;
+      if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, true)) {
+        activeFinger = true;
+        activeFingerId = e.tfinger.fingerId;
+        beginTouch(logicalNx, logicalNy);
+      }
+    } else if (e.type == SDL_FINGERMOTION && activeFinger &&
+               e.tfinger.fingerId == activeFingerId) {
+      float logicalNx = 0.0f;
+      float logicalNy = 0.0f;
+      if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false))
+        moveTouch(logicalNx, logicalNy);
+    } else if (e.type == SDL_FINGERUP && activeFinger &&
+               e.tfinger.fingerId == activeFingerId) {
+      float logicalNx = 0.0f;
+      float logicalNy = 0.0f;
+      if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false))
+        endTouch(logicalNx, logicalNy);
+      activeFinger = false;
     } else if (e.type == SDL_MOUSEBUTTONDOWN &&
+               e.button.which != SDL_TOUCH_MOUSEID &&
                e.button.button == SDL_BUTTON_LEFT) {
       // The on-screen key strip sits below the panel in the same logical
       // space, so it gets first refusal on a press. Anything it takes must not
@@ -657,6 +745,7 @@ void HalGPIO::update() {
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
       beginTouch(logicalNx, logicalNy);
     } else if (e.type == SDL_MOUSEMOTION &&
+               e.motion.which != SDL_TOUCH_MOUSEID &&
                !SimulatorOnScreenControls::capturing() && touchState.down) {
       const float logicalNx =
           static_cast<float>(e.motion.x) /
@@ -666,6 +755,7 @@ void HalGPIO::update() {
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
       moveTouch(logicalNx, logicalNy);
     } else if (e.type == SDL_MOUSEBUTTONUP &&
+               e.button.which != SDL_TOUCH_MOUSEID &&
                e.button.button == SDL_BUTTON_LEFT) {
       if (SimulatorOnScreenControls::handleRelease()) {
         continue;
