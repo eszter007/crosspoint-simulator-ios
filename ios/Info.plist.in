@@ -43,8 +43,14 @@
 
   <key>UIRequiredDeviceCapabilities</key>
   <array>
-    <string>armv7</string>
+    <string>arm64</string>
   </array>
+
+  <!-- SDL delivers pointer input (trackpad, mouse, Pencil) as indirect events.
+       Without this key iOS refuses to send them and logs a warning at launch;
+       touch is unaffected either way. -->
+  <key>UIApplicationSupportsIndirectInputEvents</key>
+  <true/>
   <key>UIStatusBarHidden</key>
   <true/>
   <key>UIViewControllerBasedStatusBarAppearance</key>
