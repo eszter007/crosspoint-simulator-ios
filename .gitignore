@@ -1,3 +1,53 @@
-# CMake build trees for the iOS/desktop build in ios/ (see ios/README.md).
+# CMake / generated Xcode builds
 build/
 build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Xcode user and archive output
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.ipa
+*.dSYM/
+*.dSYM.zip
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Simulator runtime storage
+fs_/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Editors and local agent settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.claude/settings.local.json
+.codex/
+
+# Logs, temporary files, and local secrets
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
