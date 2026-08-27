@@ -5,6 +5,10 @@
 #include <algorithm>
 #include <iostream>
 
+#include "HalDisplay.h"
+
+extern HalDisplay display;
+
 HalFrontlight &HalFrontlight::getInstance() {
   static HalFrontlight instance;
   return instance;
@@ -22,9 +26,7 @@ void HalFrontlight::begin(uint8_t brightness, uint8_t warmth, bool on) {
             << std::endl;
 }
 
-bool HalFrontlight::present() const {
-  return BoardConfig::hasPwmFrontlight();
-}
+bool HalFrontlight::present() const { return BoardConfig::hasPwmFrontlight(); }
 
 bool HalFrontlight::hasColorTemperature() const {
   return BoardConfig::isX4Pro();
@@ -32,14 +34,19 @@ bool HalFrontlight::hasColorTemperature() const {
 
 void HalFrontlight::setBrightness(uint8_t percent) {
   lastBrightness = std::min<uint8_t>(percent, 100);
+  display.requestPresent();
 }
 
 void HalFrontlight::setWarmth(uint8_t warmPercent) {
   if (hasColorTemperature())
     lastWarmth = std::min<uint8_t>(warmPercent, 100);
+  display.requestPresent();
 }
 
-void HalFrontlight::setOn(bool on) { lit = present() && on; }
+void HalFrontlight::setOn(bool on) {
+  lit = present() && on;
+  display.requestPresent();
+}
 
 uint8_t HalFrontlight::brightness() const { return lastBrightness; }
 

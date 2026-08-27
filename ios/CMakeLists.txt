@@ -302,6 +302,14 @@ target_compile_definitions(crosspoint_simulator PRIVATE
 )
 
 # -Wno-c++11-narrowing, as the PlatformIO env passes.
+# HomeActivity owns a vector<RecentBook>; Apple libc++ requires the element to
+# be complete anywhere its inline constructor is instantiated.
+set_property(SOURCE
+  "${CROSSPOINT_FIRMWARE_ROOT}/src/activities/ActivityManager.cpp"
+  "${CROSSPOINT_FIRMWARE_ROOT}/src/activities/home/HomeActivity.cpp"
+  APPEND PROPERTY COMPILE_OPTIONS
+  "-include${CROSSPOINT_FIRMWARE_ROOT}/src/RecentBooksStore.h")
+
 target_compile_options(crosspoint_simulator PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:-Wno-narrowing>)
 

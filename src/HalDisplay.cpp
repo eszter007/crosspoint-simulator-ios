@@ -1,4 +1,5 @@
 #include "HalDisplay.h"
+#include "HalFrontlight.h"
 #include "SimulatorOnScreenControls.h"
 #include "SimulatorPlatform.h"
 
@@ -457,6 +458,17 @@ void HalDisplay::presentIfNeeded() {
     const std::lock_guard<std::mutex> lock(pixelBufMutex);
     SDL_UpdateTexture(texture, nullptr, pixelBuf,
                       DISPLAY_WIDTH * sizeof(uint32_t));
+  }
+
+  if (Frontlight.present()) {
+    const int level =
+        Frontlight.isOn() ? 70 + Frontlight.brightness() * 185 / 100 : 70;
+    const int warmth = Frontlight.isOn() ? Frontlight.warmth() : 0;
+    const int green = level * (100 - warmth * 25 / 100) / 100;
+    const int blue = level * (100 - warmth * 70 / 100) / 100;
+    SDL_SetTextureColorMod(texture, static_cast<Uint8>(level),
+                           static_cast<Uint8>(green),
+                           static_cast<Uint8>(blue));
   }
   SDL_RenderClear(sdl_renderer);
 

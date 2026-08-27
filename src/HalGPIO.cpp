@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,13 @@ struct TouchState {
 };
 
 TouchState touchState;
+enum class LiveTouchAction { Down, Move, Up };
+struct LiveTouchEvent {
+  LiveTouchAction action;
+  float logicalNx;
+  float logicalNy;
+};
+std::deque<LiveTouchEvent> liveTouchEvents;
 SDL_FingerID activeFingerId = 0;
 bool activeFinger = false;
 bool homeKeyDown = false;
@@ -269,14 +277,6 @@ void endHomeKey() {
   homeKeyDown = false;
 }
 
-void endHomeKeyAndGoHome() {
-  endHomeKey();
-  if (!homeKeyTappedThisFrame)
-    return;
-  beginTouch(0.5f, 0.95f);
-  endTouch(0.5f, 0.55f);
-}
-
 void updateHomeKeyHold() {
   if (homeKeyDown && !homeKeyLongFired &&
       SDL_GetTicks() - homeKeyPressedAt >= HOME_KEY_LONG_PRESS_MS) {
@@ -442,6 +442,7 @@ unsigned long buttonDownFrame[NUM_BUTTONS] = {};
 bool buttonReleasePending[NUM_BUTTONS] = {};
 bool homeKeyDownThisFrame = false;
 bool homeKeyReleasePending = false;
+unsigned long touchEventProcessedFrame = ~0UL;
 
 void applyButtonUp(int buttonIndex) {
   releasedThisFrame[buttonIndex] = true;
@@ -454,6 +455,34 @@ void pushLiveInput(const LiveInputAction action, const int button = -1) {
   event.user.code = action;
   event.user.data1 = reinterpret_cast<void *>(static_cast<intptr_t>(button));
   SDL_PushEvent(&event);
+}
+
+void processLiveTouchEvent() {
+  if (liveTouchEvents.empty() || touchEventProcessedFrame == inputFrameCounter)
+    return;
+
+  LiveTouchEvent event = liveTouchEvents.front();
+  liveTouchEvents.pop_front();
+  if (event.action == LiveTouchAction::Move) {
+    while (!liveTouchEvents.empty() &&
+           liveTouchEvents.front().action == LiveTouchAction::Move) {
+      event = liveTouchEvents.front();
+      liveTouchEvents.pop_front();
+    }
+  }
+
+  switch (event.action) {
+  case LiveTouchAction::Down:
+    beginTouch(event.logicalNx, event.logicalNy);
+    break;
+  case LiveTouchAction::Move:
+    moveTouch(event.logicalNx, event.logicalNy);
+    break;
+  case LiveTouchAction::Up:
+    endTouch(event.logicalNx, event.logicalNy);
+    break;
+  }
+  touchEventProcessedFrame = inputFrameCounter;
 }
 
 void processSyntheticEvents() {
@@ -486,7 +515,7 @@ void processSyntheticEvents() {
       beginHomeKey();
       break;
     case SyntheticAction::HomeUp:
-      endHomeKeyAndGoHome();
+      endHomeKey();
       break;
     case SyntheticAction::Sleep:
       requestSimulatorSleep();
@@ -529,7 +558,7 @@ void tick() {
   }
   if (homeKeyReleasePending) {
     homeKeyReleasePending = false;
-    endHomeKeyAndGoHome();
+    endHomeKey();
     released = true;
   }
   homeKeyDownThisFrame = false;
@@ -553,6 +582,8 @@ static void clearButtonState() {
     syntheticButtonDown[i] = false;
   }
   touchState = {};
+  liveTouchEvents.clear();
+  touchEventProcessedFrame = ~0UL;
   activeFinger = false;
   homeKeyDown = false;
   homeKeyPressedThisFrame = false;
@@ -674,7 +705,7 @@ void HalGPIO::update() {
         if (homeKeyDownThisFrame)
           homeKeyReleasePending = true;
         else
-          endHomeKeyAndGoHome();
+          endHomeKey();
         break;
       }
     } else if (e.type == SDL_QUIT) {
@@ -699,7 +730,7 @@ void HalGPIO::update() {
       }
     } else if (e.type == SDL_KEYUP) {
       if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
-        endHomeKeyAndGoHome();
+        endHomeKey();
         continue;
       }
       int btn = scancodeToButton(e.key.keysym.scancode);
@@ -709,23 +740,28 @@ void HalGPIO::update() {
     } else if (e.type == SDL_FINGERDOWN && !activeFinger) {
       float logicalNx = 0.0f;
       float logicalNy = 0.0f;
-      if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, true)) {
+      // The centered panel is letterboxed on iPhone. Clamp a contact that
+      // starts in that bezel area onto the nearest panel edge so X4 Pro edge
+      // gestures can begin at the physical screen edge.
+      if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false)) {
         activeFinger = true;
         activeFingerId = e.tfinger.fingerId;
-        beginTouch(logicalNx, logicalNy);
+        liveTouchEvents.push_back(
+            {LiveTouchAction::Down, logicalNx, logicalNy});
       }
     } else if (e.type == SDL_FINGERMOTION && activeFinger &&
                e.tfinger.fingerId == activeFingerId) {
       float logicalNx = 0.0f;
       float logicalNy = 0.0f;
       if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false))
-        moveTouch(logicalNx, logicalNy);
+        liveTouchEvents.push_back(
+            {LiveTouchAction::Move, logicalNx, logicalNy});
     } else if (e.type == SDL_FINGERUP && activeFinger &&
                e.tfinger.fingerId == activeFingerId) {
       float logicalNx = 0.0f;
       float logicalNy = 0.0f;
       if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false))
-        endTouch(logicalNx, logicalNy);
+        liveTouchEvents.push_back({LiveTouchAction::Up, logicalNx, logicalNy});
       activeFinger = false;
     } else if (e.type == SDL_MOUSEBUTTONDOWN &&
                e.button.which != SDL_TOUCH_MOUSEID &&
@@ -769,6 +805,7 @@ void HalGPIO::update() {
       endTouch(logicalNx, logicalNy);
     }
   }
+  processLiveTouchEvent();
   processSyntheticEvents();
   updateTouchHold();
   updateHomeKeyHold();

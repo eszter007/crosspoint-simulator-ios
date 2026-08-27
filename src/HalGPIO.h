@@ -101,8 +101,8 @@ public:
 
   // Verify power button was held long enough after wakeup.
   // The host wake path is synthetic, so verification always succeeds.
-  bool verifyPowerButtonWakeup(uint16_t requiredDurationMs,
-                               bool shortPressAllowed);
+  bool verifyPowerButtonWakeup(uint16_t requiredDurationMs = 0,
+                               bool shortPressAllowed = false);
 
   // Check if USB is connected
   bool isUsbConnected() const;
