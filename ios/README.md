@@ -37,12 +37,12 @@ The PlatformIO path is untouched. Both build the same simulator.
 
 - An Apple developer account. A free one is enough to run on your own device.
 
-## Build
+## Build for a device
 
 ```sh
 cmake -S ios -B build-ios -G Xcode \
       -DCMAKE_SYSTEM_NAME=iOS \
-      -DCROSSPOINT_FIRMWARE_ROOT=../crosspoint-reader \
+      -DCROSSPOINT_FIRMWARE_ROOT="$PWD/../crosspoint-reader" \
       -DSDL2_SOURCE_DIR=$HOME/src/SDL2
 open build-ios/crosspoint-sim-ios.xcodeproj
 ```
@@ -50,9 +50,89 @@ open build-ios/crosspoint-sim-ios.xcodeproj
 In Xcode, pick your device, set a signing team on the `crosspoint_simulator`
 target (Signing & Capabilities — CMake cannot generate one), and Run.
 
+> **Pass an absolute `CROSSPOINT_FIRMWARE_ROOT`.** A relative path is resolved
+> against `ios/`, not the repository root, so `../crosspoint-reader` looks for
+> the firmware *inside* this repo and fails with "No firmware at …".
+
 `-DSIMULATOR_DEVICE=` selects the board, defaulting to `x4pro`. The other values
 are `x4`, `x3`, `sticky` and `papermono`, matching the PlatformIO envs;
 `-DSIMULATOR_DISPLAY=uc8179|uc8279` overrides the panel controller.
+
+### Without opening Xcode
+
+The same project builds, installs and launches from the command line, which is
+the quicker loop once signing works:
+
+```sh
+xcodebuild -project build-ios/crosspoint-sim-ios.xcodeproj \
+           -scheme crosspoint_simulator -configuration Debug \
+           -destination 'generic/platform=iOS' \
+           DEVELOPMENT_TEAM=XXXXXXXXXX CODE_SIGN_STYLE=Automatic build
+
+xcrun devicectl list devices                 # find your device's UDID
+xcrun devicectl device install app --device <UDID> \
+      build-ios/Debug-iphoneos/crosspoint_simulator.app
+xcrun devicectl device process launch --device <UDID> org.crosspoint.simulator
+```
+
+`DEVELOPMENT_TEAM` is the ten-character **team** id, which is not the id in your
+signing certificate's name. Read it off the provisioning profile Xcode already
+made rather than guessing:
+
+```sh
+security cms -D -i ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision \
+  | plutil -p - | grep -A2 TeamIdentifier
+```
+
+The first launch on a given device fails with "its profile has not been
+explicitly trusted by the user" — an install-time step Xcode prompts for and
+`devicectl` does not. Trust it once under **Settings → General → VPN & Device
+Management**, then launch again.
+
+## Run it in the iOS Simulator
+
+Useful for iterating without a phone, and the only way to drive the app
+headlessly. It needs its own build directory: the device configuration above
+pins the iPhoneOS SDK, and reusing it for a simulator build fails to link with
+a page of undefined `_swift_*` symbols, because CMake has baked the device SDK's
+Swift runtime path into the project.
+
+```sh
+cmake -S ios -B build-iossim -G Xcode \
+      -DCMAKE_SYSTEM_NAME=iOS \
+      -DCMAKE_OSX_SYSROOT=iphonesimulator \
+      -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" \
+      -DCMAKE_XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS=iphonesimulator \
+      -DCROSSPOINT_FIRMWARE_ROOT="$PWD/../crosspoint-reader" \
+      -DSDL2_SOURCE_DIR=$HOME/src/SDL2
+
+xcodebuild -project build-iossim/crosspoint-sim-ios.xcodeproj \
+           -scheme crosspoint_simulator -configuration Debug \
+           -destination 'generic/platform=iOS Simulator' \
+           CODE_SIGNING_ALLOWED=NO build
+
+xcrun simctl boot 'iPhone 17 Pro'      # skip if one is already booted
+open -a Simulator
+xcrun simctl install booted build-iossim/Debug-iphonesimulator/crosspoint_simulator.app
+xcrun simctl launch --console-pty booted org.crosspoint.simulator
+```
+
+Three details, each of which fails in a way that does not name its cause:
+
+- **The architecture must match the host.** `$(uname -m)` gets it right; an
+  arm64 bundle on an Intel Mac installs with "Failed to find matching arch"
+  and the German-localised "must be updated by the developer" alert, even
+  though the bundle itself is perfectly well formed.
+- **Use the generic destination.** `xcodebuild` lists only "Any iOS Simulator
+  Device" for this project and rejects a concrete simulator UDID with "Unable
+  to find a destination matching the provided destination specifier", so tools
+  that pass a specific simulator id cannot build it.
+- **`--console-pty`** puts the firmware's own log on your terminal, which is
+  where `[SIM]`, `[GFX]` and the firmware's `[DBG]` lines come out.
+
+The simulated SD card is the app's Documents directory; find it with
+`xcrun simctl get_app_container booted org.crosspoint.simulator data`, and drop
+`.epub` files into it directly.
 
 ## Building for the desktop with CMake
 
@@ -60,7 +140,7 @@ The same CMakeLists produces a native binary, which is how the iOS-bound changes
 are checked without a device:
 
 ```sh
-cmake -S ios -B build -DCROSSPOINT_FIRMWARE_ROOT=../crosspoint-reader
+cmake -S ios -B build -DCROSSPOINT_FIRMWARE_ROOT="$PWD/../crosspoint-reader"
 cmake --build build
 CROSSPOINT_SIM_SD=./fs_ CROSSPOINT_SIM_CONTROLS=1 ./build/crosspoint_simulator
 ```
