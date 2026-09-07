@@ -11,7 +11,12 @@ private struct HardwareButton: View {
       pressed(true)
       pressed(false)
     } label: {
+      // A bordered Button hugs its glyph, which left these at 34pt — under the
+      // 44pt minimum, and easy to miss on a real finger. The frame sets the hit
+      // area, not just the art.
       Image(systemName: symbol)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.bordered)
     .accessibilityLabel(label)
@@ -23,6 +28,8 @@ private struct SimulatorControls: View {
     HStack {
       Button(action: simPlatformPickFolder) {
         Image(systemName: "folder")
+          .frame(minWidth: 44, minHeight: 44)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.bordered)
       .accessibilityLabel("Choose library folder")
