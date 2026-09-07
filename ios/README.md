@@ -210,6 +210,11 @@ on every path resolution, so no restart is needed, though the library screen
 needs revisiting to re-scan. If the folder later disappears (deleted, or on a
 drive that is no longer attached) the simulator falls back to Documents.
 
+There is no "unpick" key. To go back to the built-in card, open the picker again
+and choose the app's own Documents folder — it is in the picker as **On My
+iPhone → CrossPoint**. Deleting the app also clears the bookmark, since it lives
+in the app's defaults.
+
 `CROSSPOINT_SIM_SD` still wins over both where it is set, so desktop runs are
 unaffected. The folder key only appears where the platform has a picker, so the
 desktop strip is unchanged.
