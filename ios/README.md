@@ -230,18 +230,53 @@ than an iOS detail.
 
 The Files app and the folder picker both do the job without any of that.
 
-## On-screen keys
+## Controls on the phone
 
-A phone has no keyboard, and on a touch board the panel is already an input
-surface — so the simulator places native SwiftUI buttons with SF Symbols below
-the centered panel. What appears comes from the board profile:
+The panel is letterboxed into the middle of the screen and a row of keys sits
+below it, in the safe area. Between them they are the whole device: the panel is
+the e-ink glass, the keys are the ones the hardware has that a touchscreen
+cannot stand in for.
+
+### The panel is the touch panel
+
+On a touch board your finger on the panel *is* the finger on the glass, so the
+firmware's own gestures are the controls — there is nothing simulator-specific
+to learn:
+
+- **Tap** a row, tile or tab to activate it. Tapping is also how you reach Back
+  and Confirm, exactly as on the hardware.
+- **Swipe up / down** to scroll a list or settings page, one screenful per
+  swipe.
+- **Swipe left / right** in the reader to turn pages.
+- **Tap the status bar** — the top strip with the battery — from Home, the file
+  browser or Settings to open the frontlight panel. A **swipe down from the top
+  edge** does the same on any board that has a frontlight.
+- **Drag** the brightness and warmth sliders in that panel; they track your
+  finger.
+
+Anything outside the panel is bezel: the black bands above and below it are not
+part of the glass and swallow touches, so start an edge gesture just inside the
+panel rather than at the very edge of the phone.
+
+### The key strip
+
+Native SwiftUI buttons with SF Symbols, sized to the 44pt minimum so they are
+comfortable under a thumb. What appears comes from the board profile:
 
 - **Touch boards** (X4 Pro, Sticky, Paper Mono) reach Back and Confirm through
-  the panel, exactly as the hardware does. The strip carries only what the panel
-  cannot provide: the two page keys, Power, and — on the X4 Pro — the capacitive
-  Home key.
+  the panel, so the strip carries only what the panel cannot provide: the two
+  page keys, Power, and — on the X4 Pro — the capacitive Home key. The X4 Pro
+  strip reads: folder, page up, Home, Power, page down.
 - **Button boards** (X4, X3) have no panel to press, so the strip stands in for
-  the whole keyboard mapping.
+  the whole keyboard mapping: Back, Left, Up, Confirm, Down, Right, Power.
+
+The page keys are worth knowing even on a touch board: they scroll a screen the
+firmware has not given a swipe handler, and they step finely where a swipe
+scrolls by a whole page.
+
+The leftmost **folder key** is the one control with no hardware counterpart — it
+opens the system folder picker to repoint the simulated SD card (see
+[Getting books onto it](#getting-books-onto-it)).
 
 The SwiftUI controls are always on for iOS. On desktop the SDL strip is opt-in with
 `CROSSPOINT_SIM_CONTROLS=1`, so the window stays exactly panel-sized by default.
