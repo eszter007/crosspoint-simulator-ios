@@ -192,6 +192,11 @@ inline bool selectDevice(Board board) {
 }
 
 inline bool isX4Pro() { return ACTIVE.board == Board::XteinkX4Pro; }
+// The SDK's X4 Classic is its own board (an S3 X4 with no touch and no
+// frontlight, those pins becoming extra keys). The simulator has no profile for
+// it — SIMULATOR_DEVICE offers x4, x3, x4pro, sticky and papermono — so this is
+// always false until one is added.
+inline bool isX4Classic() { return false; }
 inline bool isSticky() { return ACTIVE.board == Board::Sticky; }
 inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
 inline bool hasTouch() { return isX4Pro() || isSticky() || isPaperMono(); }

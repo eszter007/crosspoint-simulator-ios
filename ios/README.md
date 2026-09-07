@@ -91,9 +91,19 @@ What that needed, for reference if you carry another fork:
   `ulTaskNotifyValueClear`, `vSemaphoreDelete`, the `JPEGDEC` result enum, and
   `SecureHttpClient`'s `std::string` `POST`/`getString` signatures, which had
   drifted from the SDK's.
+- **Newer HAL surface on Matcha's `develop`**, which is also upstream's
+  direction rather than anything fork-specific: the `UsbDriveState` enum with
+  `HalStorage::beginUsbDrive` / `disconnectUsbDriveHost` / `endUsbDrive` /
+  `usbDriveState`, `HalStorage::prepareForDeepSleep`, and
+  `BoardConfig::isX4Classic`. USB mass storage has no simulator counterpart —
+  the SD card is a host directory, so `usbDriveState()` is always `Unsupported`
+  and the firmware keeps to the path it already has for that. The USB Drive
+  screen itself sits behind `FREEINK_CAP_USB_MSC` and is unreachable here; the
+  stubs exist so the header compiles. `isX4Classic()` is always false: the SDK's
+  X4 Classic is its own board and `SIMULATOR_DEVICE` has no profile for it.
 
-Both firmwares build and run from the same tree; upstream is checked on every
-change here.
+All three build from the same tree — Matcha's merge branch and `develop`, and
+upstream — and upstream is checked on every change here.
 
 ## Getting books onto it
 
