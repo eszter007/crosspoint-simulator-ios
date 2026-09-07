@@ -142,18 +142,32 @@ bool fingerToLogicalNormalized(const SDL_TouchFingerEvent &finger,
   if (!eventWindow || !eventRenderer)
     return false;
 
+  const int logicalWidth = renderer.getScreenWidth();
+  const int logicalHeight = renderer.getScreenHeight();
+
+  float logicalX = 0.0f;
+  float logicalY = 0.0f;
+#if defined(SIMULATOR_IOS)
+  // SDL normalises a touch against the renderer's logical presentation area,
+  // which SDL_RenderSetLogicalSize has already letterboxed into the
+  // full-screen window. finger.x/y therefore *are* the logical space, and
+  // running them back through SDL_RenderWindowToLogical() subtracts the
+  // letterbox a second time. That pushed every contact toward the top of the
+  // panel: near the top edge the result went negative and clamped to 0, so the
+  // whole first slider row was unreachable, while lower rows were merely off
+  // by less than their own height and still hit. Scale directly instead.
+  logicalX = finger.x * static_cast<float>(std::max(1, logicalWidth - 1));
+  logicalY = finger.y * static_cast<float>(std::max(1, logicalHeight - 1));
+#else
   int windowWidth = 0;
   int windowHeight = 0;
   SDL_GetWindowSize(eventWindow, &windowWidth, &windowHeight);
-  float logicalX = 0.0f;
-  float logicalY = 0.0f;
   SDL_RenderWindowToLogical(
       eventRenderer, static_cast<int>(finger.x * std::max(0, windowWidth - 1)),
       static_cast<int>(finger.y * std::max(0, windowHeight - 1)), &logicalX,
       &logicalY);
+#endif
 
-  const int logicalWidth = renderer.getScreenWidth();
-  const int logicalHeight = renderer.getScreenHeight();
   const bool inside = logicalX >= 0.0f && logicalX < logicalWidth &&
                       logicalY >= 0.0f && logicalY < logicalHeight;
   logicalNx = clamp01(logicalX / std::max(1, logicalWidth - 1));
