@@ -45,6 +45,13 @@ static constexpr SDL_Scancode SIMULATOR_SLEEP_SCANCODE = SDL_SCANCODE_S;
 static constexpr SDL_Scancode HOME_KEY_SCANCODE = SDL_SCANCODE_H;
 static constexpr int TOUCH_TAP_SLOP_PX = 28;
 static constexpr int TOUCH_SWIPE_MIN_PX = 60;
+// The SDK keeps two slops, and they do different jobs: TOUCH_TAP_SLOP_PX ends a
+// long press, while a release only stops counting as a tap once it has moved
+// far enough to be a swipe instead. Using the tighter one for both, as this did,
+// made the simulator stricter than the device — a tap that drifted 30-59px was
+// silently dropped here but registers on hardware, which is most sloppy taps
+// from a real finger.
+static constexpr int TOUCH_TAP_RELEASE_SLOP_PX = TOUCH_SWIPE_MIN_PX - 1;
 static constexpr unsigned long TOUCH_SWIPE_MAX_MS = 700;
 static constexpr unsigned long TOUCH_LONG_PRESS_MS = 500;
 static constexpr unsigned long HOME_KEY_LONG_PRESS_MS = 700;
@@ -72,6 +79,7 @@ struct TouchState {
   bool pressedThisFrame = false;
   bool releasedThisFrame = false;
   bool movedBeyondTapSlop = false;
+  bool movedBeyondTapReleaseSlop = false;
   bool longPressThisFrame = false;
   bool longPressFired = false;
   bool suppressed = false;
@@ -222,6 +230,10 @@ void updateTouchMovement(float panelNx, float panelNy) {
   if (std::abs(dx) > TOUCH_TAP_SLOP_PX || std::abs(dy) > TOUCH_TAP_SLOP_PX) {
     touchState.movedBeyondTapSlop = true;
   }
+  if (std::abs(dx) > TOUCH_TAP_RELEASE_SLOP_PX ||
+      std::abs(dy) > TOUCH_TAP_RELEASE_SLOP_PX) {
+    touchState.movedBeyondTapReleaseSlop = true;
+  }
 }
 
 void beginTouch(float logicalNx, float logicalNy) {
@@ -234,6 +246,7 @@ void beginTouch(float logicalNx, float logicalNy) {
   touchState.pressedThisFrame = true;
   touchState.activityThisFrame = true;
   touchState.movedBeyondTapSlop = false;
+  touchState.movedBeyondTapReleaseSlop = false;
   touchState.longPressThisFrame = false;
   touchState.longPressFired = false;
   touchState.suppressed = false;
@@ -922,7 +935,7 @@ bool HalGPIO::wasHomeKeyLongPressed() const {
 }
 
 bool HalGPIO::wasTouchTap(float &nx, float &ny) const {
-  if (!touchState.releasedThisFrame || touchState.movedBeyondTapSlop ||
+  if (!touchState.releasedThisFrame || touchState.movedBeyondTapReleaseSlop ||
       touchState.suppressed)
     return false;
   nx = touchState.startNx;
