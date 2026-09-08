@@ -14,9 +14,6 @@
 
 class HalFile;
 
-// Mirrors the firmware's enum. The simulator's SD card is a host directory, so
-// it can never be handed to a USB host — usbDriveState() is always Unsupported,
-// which the firmware's USB Drive screen already has a case for.
 enum class UsbDriveState : uint8_t {
   Unsupported,
   WaitingForHost,
@@ -31,11 +28,7 @@ public:
   HalStorage();
   bool begin();
   bool ready() const;
-  // Deep sleep unmounts the SD card on hardware. Nothing to release here: the
-  // simulated card is a directory that stays where it is across a sleep.
-  void prepareForDeepSleep();
-  // USB mass storage has no simulator counterpart — there is no card to hand
-  // over. beginUsbDrive() fails, so the firmware stays on its unsupported path.
+  void prepareForDeepSleep() {};
   bool beginUsbDrive();
   bool disconnectUsbDriveHost();
   void endUsbDrive();

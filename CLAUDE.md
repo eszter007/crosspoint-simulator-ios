@@ -32,7 +32,7 @@ The simulator is a collection of host-side reimplementations of the firmware's h
 - **Orientation rotation lives in two places.** The firmware's renderer rotates content into the landscape framebuffer (90 CCW for `Portrait`). The simulator undoes that with `SDL_RenderCopyEx`. If you change one, change the other. The dst rect is landscape-shaped and centre-offset because `SDL_RenderCopyEx` rotates around the dst centre.
 - **HiDPI / dithering.** Set `SDL_HINT_RENDER_SCALE_QUALITY=1` *before* `SDL_CreateTexture`, plus `SDL_WINDOW_ALLOW_HIGHDPI` and `SDL_RenderSetLogicalSize`. Without all three, Bayer-dithered grays render as harsh black/white stripes on Retina.
 - **POSIX fds, not std::fstream, in [src/HalStorage.cpp](src/HalStorage.cpp).** This was a deliberate rewrite. fstream's separate get/put pointers, eofbit-blocks-seek behaviour, and write-only seek restrictions caused several silent-corruption bugs. Do not reintroduce fstream here. All paths are prefixed with `./fs_` so the simulated filesystem stays sandboxed under the binary's working directory; `/books/` on the SD card maps to `./fs_/books/`. Directory iteration skips only the special `.` and `..` entries; firmware applies its own hidden-file policy.
-- **FreeRTOS shim.** [src/freertos/](src/freertos/) maps `xTaskCreate` to `std::thread`, task notifies to a condvar + counter, and `SemaphoreHandle_t` to `std::recursive_mutex`. A `thread_local SimTaskHandle*` lets each task thread find its own handle.
+- **FreeRTOS shim.** [src/freertos/](src/freertos/) maps `xTaskCreate` to `std::thread`, task notifies to a condvar + counter, and `SemaphoreHandle_t` to a tagged handle with two arms, a `std::recursive_mutex` for `xSemaphoreCreateMutex` and a real binary semaphore for `xSemaphoreCreateBinary`. A `thread_local SimTaskHandle*` lets each task thread find its own handle.
 - **`_exit(0)` not `return 0`.** [src/simulator_main.cpp](src/simulator_main.cpp) ends with `_exit(0)` after `SDL_Quit()` to skip C++ global destructors. The render task is `[[noreturn]]`, so running destructors while it is mid-render races and produces a "quit unexpectedly" dialog. Keep this.
 - **Time uses `steady_clock`.** `millis()` / `micros()` in [src/Arduino.h](src/Arduino.h) deliberately use `steady_clock`, not `system_clock`, so wall-clock changes do not perturb timing.
 
@@ -55,6 +55,7 @@ The simulator is a collection of host-side reimplementations of the firmware's h
 
 [src/BoardConfig.h](src/BoardConfig.h) selects X4 by default,
 `SIMULATOR_DEVICE_X3` for X3, `SIMULATOR_DEVICE_X4_PRO` for X4 Pro, and
+`SIMULATOR_DEVICE_X4_CLASSIC` for X4 Classic,
 `SIMULATOR_DEVICE_STICKY` for Seeed Sticky, or
 `SIMULATOR_DEVICE_PAPERMONO` for M5Stack PaperMono.
 `SIMULATOR_DISPLAY_UC8179` and `SIMULATOR_DISPLAY_UC8279` select per-batch
@@ -63,6 +64,8 @@ Keep the reported board and controller aligned with the firmware SDK. X4 Pro
 uses the same 800x480 display geometry as X4 but adds touch, a capacitive Home
 key, frontlight state, inversion, and an RTC. Sticky also uses 800x480 and adds
 touch, RTC, and tilt without a Home key or frontlight.
+X4 Classic uses the X4 family's 800x480 controller variants and adds RTC, tilt,
+side buttons, and front buttons without touch, a Home key, or frontlight.
 PaperMono uses an 800x480 SSD1677 panel with FT6336-compatible touch, RTC, and
 single-channel frontlight state, without a Home key or tilt.
 

@@ -63,7 +63,8 @@ target (Signing & Capabilities — CMake cannot generate one), and Run.
 > the firmware *inside* this repo and fails with "No firmware at …".
 
 `-DSIMULATOR_DEVICE=` selects the board, defaulting to `x4pro`. The other values
-are `x4`, `x3`, `sticky` and `papermono`, matching the PlatformIO envs;
+are `x4`, `x3`, `x4classic`, `sticky` and `papermono`, matching the
+PlatformIO envs;
 `-DSIMULATOR_DISPLAY=uc8179|uc8279` overrides the panel controller.
 
 ### Without opening Xcode
@@ -179,16 +180,16 @@ What that needed, for reference if you carry another fork:
   `ulTaskNotifyValueClear`, `vSemaphoreDelete`, the `JPEGDEC` result enum, and
   `SecureHttpClient`'s `std::string` `POST`/`getString` signatures, which had
   drifted from the SDK's.
-- **Newer HAL surface on Matcha's `develop`**, which is also upstream's
-  direction rather than anything fork-specific: the `UsbDriveState` enum with
-  `HalStorage::beginUsbDrive` / `disconnectUsbDriveHost` / `endUsbDrive` /
-  `usbDriveState`, `HalStorage::prepareForDeepSleep`, and
-  `BoardConfig::isX4Classic`. USB mass storage has no simulator counterpart —
-  the SD card is a host directory, so `usbDriveState()` is always `Unsupported`
-  and the firmware keeps to the path it already has for that. The USB Drive
-  screen itself sits behind `FREEINK_CAP_USB_MSC` and is unreachable here; the
-  stubs exist so the header compiles. `isX4Classic()` is always false: the SDK's
-  X4 Classic is its own board and `SIMULATOR_DEVICE` has no profile for it.
+- **`HalGPIO::verifyPowerButtonWakeup`**, which this fork declares with
+  defaulted parameters — `(uint16_t requiredDurationMs = 0, bool
+  shortPressAllowed = false)`. Upstream CrossPoint passes both arguments and
+  Matcha passes none, so the defaults are what lets one header satisfy both.
+
+The newer HAL surface Matcha's `develop` needed — the `UsbDriveState` enum and
+`HalStorage`'s USB drive calls, `prepareForDeepSleep`, and X4 Classic support —
+was carried as fork stubs only briefly: upstream has since implemented all of
+it, including real X4 Classic emulation rather than a board this simulator
+cannot be. Those stubs are gone, replaced by upstream's versions.
 
 All three build from the same tree — Matcha's merge branch and `develop`, and
 upstream — and upstream is checked on every change here.
@@ -378,6 +379,9 @@ these flags:
 - `-DSIMULATOR_DEVICE_X4_PRO` keeps the X4 family's 800x480 framebuffer and
   selects the X4 Pro board profile. It exposes touch and swipe input, the
   capacitive Home key, the RTC, display inversion, and frontlight state.
+- `-DSIMULATOR_DEVICE_X4_CLASSIC` selects the X4 Classic's 800x480
+  buttons-only profile. It exposes the RTC, tilt sensor, side page-turn
+  buttons, and four front buttons without touch, a Home key, or frontlight.
 - `-DSIMULATOR_DEVICE_STICKY` selects the Seeed Sticky's 800x480 SSD1677
   profile. It exposes touch and swipe input, the RTC, and the tilt sensor
   without exposing the X4 Pro-only Home key or frontlight.
@@ -393,9 +397,10 @@ these flags:
 The sample PlatformIO files include ready-to-use environments for the original
 profiles plus `simulator_sticky`, `simulator_x3_uc8279`, `simulator_x4_uc8179`,
 `simulator_x4_uc8279`, `simulator_x4_pro_uc8179`, and
-`simulator_x4_pro_uc8279`, plus `simulator_papermono`. The UC8279 X4 Pro path
-mirrors current FreeInk SDK support but remains pending validation on physical
-UC8279 X4 Pro hardware.
+`simulator_x4_pro_uc8279`, the three `simulator_x4_classic` controller
+variants, plus `simulator_papermono`. The UC8279 X4 Pro path mirrors current
+FreeInk SDK support but remains pending validation on physical UC8279 X4 Pro
+hardware.
 
 Controller profiles expose the same framebuffer geometry and device
 capabilities as their original production run. The simulator records the

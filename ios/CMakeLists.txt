@@ -53,8 +53,8 @@ message(STATUS "FreeInk SDK: ${FREEINK_SDK_ROOT}")
 # Mirrors the PlatformIO envs in sample-platformio-*.ini. Defaults to the X4 Pro:
 # it is the touch board, and a phone with no keyboard is a poor fit for the
 # button-only devices.
-set(SIMULATOR_DEVICE "x4pro" CACHE STRING "Device to simulate: x4, x3, x4pro, sticky, papermono")
-set_property(CACHE SIMULATOR_DEVICE PROPERTY STRINGS x4 x3 x4pro sticky papermono)
+set(SIMULATOR_DEVICE "x4pro" CACHE STRING "Device to simulate: x4, x3, x4pro, x4classic, sticky, papermono")
+set_property(CACHE SIMULATOR_DEVICE PROPERTY STRINGS x4 x3 x4pro x4classic sticky papermono)
 
 set(SIMULATOR_DISPLAY "default" CACHE STRING "Panel controller override: default, uc8179, uc8279")
 set_property(CACHE SIMULATOR_DISPLAY PROPERTY STRINGS default uc8179 uc8279)
@@ -66,6 +66,8 @@ elseif(SIMULATOR_DEVICE STREQUAL "x3")
   list(APPEND DEVICE_DEFINES SIMULATOR_DEVICE_X3 FREEINK_DEVICE_X3=1)
 elseif(SIMULATOR_DEVICE STREQUAL "x4pro")
   list(APPEND DEVICE_DEFINES SIMULATOR_DEVICE_X4_PRO FREEINK_DEVICE_X4PRO=1)
+elseif(SIMULATOR_DEVICE STREQUAL "x4classic")
+  list(APPEND DEVICE_DEFINES SIMULATOR_DEVICE_X4_CLASSIC FREEINK_DEVICE_X4CLASSIC=1)
 elseif(SIMULATOR_DEVICE STREQUAL "sticky")
   list(APPEND DEVICE_DEFINES SIMULATOR_DEVICE_STICKY FREEINK_DEVICE_STICKY=1)
 elseif(SIMULATOR_DEVICE STREQUAL "papermono")
