@@ -1,9 +1,22 @@
 #pragma once
 #include <Arduino.h>
+#include <BoardConfig.h>
 #include <EInkDisplay.h>
 
 class HalDisplay {
 public:
+  using Controller = BoardConfig::DisplayController;
+  Controller getController() const;
+
+  using GrayscaleMode = freeink::GrayscaleMode;
+  using GrayscaleCapabilities = freeink::GrayscaleCapabilities;
+  using GrayscaleBase = freeink::GrayscaleBase;
+  using GrayscaleEncoding = freeink::GrayscaleEncoding;
+
+  GrayscaleCapabilities
+  grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
+  bool supportsAsyncGrayscaleBase() const;
+
   // Constructor with pin configuration
   HalDisplay();
 
@@ -65,6 +78,9 @@ public:
   uint32_t getBufferSize() const;
 
   void displayGrayscaleBase(RefreshMode fallback = HALF_REFRESH,
+                            bool turnOffScreen = false);
+  bool displayGrayscaleBase(GrayscaleMode mode,
+                            RefreshMode fallback = HALF_REFRESH,
                             bool turnOffScreen = false);
   void preconditionGrayscale();
   void preconditionGrayscale(uint16_t x, uint16_t y, uint16_t w, uint16_t h);

@@ -19,6 +19,33 @@
 #define EPD_BUSY 0
 #endif
 
+// Mirrors freeink-sdk/libs/display/FreeInkDisplay/include/GrayscaleCapabilities.h.
+// The firmware's HalDisplay pulls these in through the SDK's display header; this
+// file is the simulator's stand-in for it, so they live here.
+namespace freeink {
+
+enum class GrayscaleMode : uint8_t { Overlay, Absolute };
+enum class GrayscaleEncoding : uint8_t {
+  Unsupported,
+  OverlayMasks,
+  AbsolutePlanes
+};
+enum class GrayscaleBase : uint8_t { Separate, Combined };
+
+struct GrayscaleCapabilities {
+  GrayscaleEncoding encoding = GrayscaleEncoding::Unsupported;
+  GrayscaleBase base = GrayscaleBase::Separate;
+  bool stripUploads = false;
+  bool asyncBase = false;
+  bool stagingWhileBusy = false;
+
+  constexpr bool supported() const {
+    return encoding != GrayscaleEncoding::Unsupported;
+  }
+};
+
+} // namespace freeink
+
 class EInkDisplay {
 public:
   // X3: 3.7" panel, 3:2 aspect ratio, ~257 ppi (792×528 landscape buffer)

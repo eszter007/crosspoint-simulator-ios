@@ -70,6 +70,9 @@ public:
   // state is stale there; this lets them notice a press and bail out. Consumes
   // no edges -- the normal update()/wasPressed() path still sees the press.
   bool anyButtonDownRaw();
+  // On device this reads the button ADC ladder directly to break an idle sleep
+  // slice early. Here the raw level read is already the same answer.
+  bool rawInputActive() { return anyButtonDownRaw(); }
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;

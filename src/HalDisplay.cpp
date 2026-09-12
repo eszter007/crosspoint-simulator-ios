@@ -624,6 +624,40 @@ bool HalDisplay::combinesGrayscaleBase() const {
   return BoardConfig::isPaperMono();
 }
 
+HalDisplay::Controller HalDisplay::getController() const {
+  return BoardConfig::ACTIVE.displayController;
+}
+
+// ponytail: overlay masks only. The preview compositor in this file reads the
+// LSB/MSB planes as overlay masks over the B/W base, so absolute planes would
+// render as garbage; teach composeGrayscalePreview() the absolute encoding
+// before reporting it here.
+HalDisplay::GrayscaleCapabilities
+HalDisplay::grayscaleCapabilities(const GrayscaleMode mode) const {
+  if (mode == GrayscaleMode::Absolute) {
+    return {};
+  }
+  return {GrayscaleEncoding::OverlayMasks,
+          combinesGrayscaleBase() ? GrayscaleBase::Combined
+                                  : GrayscaleBase::Separate,
+          /*stripUploads=*/true, /*asyncBase=*/false,
+          /*stagingWhileBusy=*/false};
+}
+
+bool HalDisplay::supportsAsyncGrayscaleBase() const {
+  return grayscaleCapabilities().asyncBase;
+}
+
+bool HalDisplay::displayGrayscaleBase(const GrayscaleMode mode,
+                                      const RefreshMode fallback,
+                                      const bool turnOffScreen) {
+  if (!grayscaleCapabilities(mode).supported()) {
+    return false;
+  }
+  displayGrayscaleBase(fallback, turnOffScreen);
+  return true;
+}
+
 uint16_t HalDisplay::getDisplayWidth() const { return DISPLAY_WIDTH; }
 uint16_t HalDisplay::getDisplayHeight() const { return DISPLAY_HEIGHT; }
 uint16_t HalDisplay::getDisplayWidthBytes() const {
