@@ -24,7 +24,7 @@
 // file is the simulator's stand-in for it, so they live here.
 namespace freeink {
 
-enum class GrayscaleMode : uint8_t { Overlay, Absolute };
+enum class GrayscaleMode : uint8_t { Overlay, Absolute, Direct };
 enum class GrayscaleEncoding : uint8_t {
   Unsupported,
   OverlayMasks,

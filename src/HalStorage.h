@@ -33,6 +33,8 @@ public:
   bool disconnectUsbDriveHost();
   void endUsbDrive();
   UsbDriveState usbDriveState() const;
+  // No USB device stack here, so a host can never suspend one.
+  bool usbDriveHostSuspended() const { return false; }
   std::vector<String> listFiles(const char *path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on
   // failure.
@@ -106,6 +108,9 @@ public:
   // unavailable. Used as a change signal for the Library index so unchanged
   // books are not re-examined.
   uint32_t modifiedStamp();
+  // Same packed FAT date/time as modifiedStamp(), which is how the firmware
+  // computes it too; both return 0 when the card has no stamp for the entry.
+  uint32_t modificationTime() { return modifiedStamp(); }
   size_t fileSize();
   uint64_t fileSize64();
   bool seek(size_t pos);

@@ -631,10 +631,11 @@ HalDisplay::Controller HalDisplay::getController() const {
 // ponytail: overlay masks only. The preview compositor in this file reads the
 // LSB/MSB planes as overlay masks over the B/W base, so absolute planes would
 // render as garbage; teach composeGrayscalePreview() the absolute encoding
-// before reporting it here.
+// before reporting it here. Direct is Absolute's encoding with a combined
+// activation, so it is out for the same reason.
 HalDisplay::GrayscaleCapabilities
 HalDisplay::grayscaleCapabilities(const GrayscaleMode mode) const {
-  if (mode == GrayscaleMode::Absolute) {
+  if (mode != GrayscaleMode::Overlay) {
     return {};
   }
   return {GrayscaleEncoding::OverlayMasks,
