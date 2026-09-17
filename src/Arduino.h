@@ -42,6 +42,8 @@ inline int digitalRead(int /*pin*/) { return 1; }
 #include "HardwareSerial.h"
 #include "Print.h"
 #include "WString.h"
+// For FREEINK_MCU_C3, so the reported chip follows the selected board.
+#include "BoardConfig.h"
 
 struct ESPMock {
   static constexpr uint32_t HEAP_SIZE = 1024 * 1024;
@@ -66,6 +68,13 @@ struct ESPMock {
   uint32_t getMaxAllocHeap() {
     return std::min(heapValue("CROSSPOINT_SIM_MAX_ALLOC_HEAP"), getFreeHeap());
   }
+
+  // The About screen prints the silicon it is running on. Report the part the
+  // selected board actually carries, so the simulator's About screen matches
+  // the device's rather than inventing a chip.
+  const char *getChipModel() { return FREEINK_MCU_C3 ? "ESP32-C3" : "ESP32-S3"; }
+  uint8_t getChipRevision() { return 3; }
+  uint32_t getFlashChipSize() { return 16u * 1024u * 1024u; }
 };
 extern ESPMock ESP;
 

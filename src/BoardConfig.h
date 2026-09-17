@@ -108,18 +108,34 @@ enum class Board {
   PaperMono,
 };
 
-enum class DisplayController {
-  SSD1677,
-  UC8253,
-  UC8279,
-  UC8179,
+// Values match the SDK's BoardConfig::DisplayController exactly, including the
+// gaps: firmware prints these by name and switches over the full set, so a
+// simulator-only subset fails to compile against it.
+enum class DisplayController : uint8_t {
+  SSD1677 = 0,
+  UC8253 = 2,
+  ED2208 = 3,
+  LgfxEpd = 4,
+  IT8951 = 5,
+  UC8279 = 6,
+  UC8179 = 7,
+  UC8279C = 8,
 };
+
+// The SDK's optional capacitive touch controller. The simulator models touch as
+// present-or-not per board (hasTouch()), and reports the part the real board
+// carries so the About screen names it the same way.
+enum class TouchController : uint8_t { None, Chsc6x, Gt911, Ft5x06, Ft6336u, Gslx680 };
 
 struct ViewableInsets {
   uint8_t top = 9;
   uint8_t right = 3;
   uint8_t bottom = 3;
   uint8_t left = 3;
+};
+
+struct TouchConfig {
+  TouchController controller = TouchController::None;
 };
 
 struct BoardProfile {
@@ -132,6 +148,12 @@ struct BoardProfile {
     int8_t down;
   } input;
   ViewableInsets viewableInsets = {};
+  // Panel geometry and touch part, as the SDK profile carries them. Every board
+  // the simulator models is 800x480; the default keeps the existing profile
+  // literals valid without restating it.
+  uint16_t displayWidth = 800;
+  uint16_t displayHeight = 480;
+  TouchConfig touch = {};
 };
 
 #if defined(SIMULATOR_DISPLAY_UC8179)
@@ -161,15 +183,17 @@ inline constexpr BoardProfile XTEINK_X3_UC8279 = {
     {4, 5}};
 inline constexpr BoardProfile XTEINK_X4_PRO = {
     Board::XteinkX4Pro, "xteink_x4_pro", X4_DISPLAY_CONTROLLER,
-    X4_DISPLAY_CONTROLLER_VARIANT, {0, 7}};
+    X4_DISPLAY_CONTROLLER_VARIANT, {0, 7}, {}, 800, 480,
+    {TouchController::Gt911}};
 inline constexpr BoardProfile XTEINK_X4_CLASSIC = {
     Board::XteinkX4Classic, "xteink_x4_classic", X4_DISPLAY_CONTROLLER,
     X4_DISPLAY_CONTROLLER_VARIANT, {0, 7}, {9, 7, 3, 7}};
 inline constexpr BoardProfile STICKY = {
-    Board::Sticky, "sticky", DisplayController::SSD1677, 0, {5, 6}};
+    Board::Sticky, "sticky", DisplayController::SSD1677, 0, {5, 6}, {}, 800,
+    480, {TouchController::Gt911}};
 inline constexpr BoardProfile PAPER_MONO = {
     Board::PaperMono, "m5stack_paper_mono", DisplayController::SSD1677, 0,
-    {0, 7}, {9, 7, 3, 7}};
+    {0, 7}, {9, 7, 3, 7}, 800, 480, {TouchController::Ft5x06}};
 
 #if defined(SIMULATOR_DEVICE_PAPERMONO)
 inline BoardProfile ACTIVE = PAPER_MONO;
@@ -220,7 +244,7 @@ inline bool isX4Pro() { return ACTIVE.board == Board::XteinkX4Pro; }
 inline bool isX4Classic() { return ACTIVE.board == Board::XteinkX4Classic; }
 inline bool isSticky() { return ACTIVE.board == Board::Sticky; }
 inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
-inline bool hasTouch() { return isX4Pro() || isSticky() || isPaperMono(); }
+inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
 inline bool hasHomeKey() { return isX4Pro(); }
 inline bool hasPwmFrontlight() { return isX4Pro() || isPaperMono(); }
 

@@ -1,5 +1,8 @@
 #include "HalClock.h"
 
+#include <cstdlib>
+#include <ctime>
+
 #include <cstdio>
 #include <ctime>
 
@@ -131,6 +134,15 @@ bool HalClock::systemTimeValid() {
 
 void HalClock::restoreSystemTime() const {
   // No-op: nothing to restore, the host clock is already right.
+}
+
+void HalClock::setTimezone(const char *posixTz) {
+  if (posixTz == nullptr || *posixTz == '\0') {
+    setenv("TZ", "UTC0", 1);
+  } else {
+    setenv("TZ", posixTz, 1);
+  }
+  tzset();
 }
 
 void HalClock::persistSystemTime() const {

@@ -15,6 +15,9 @@ class HalClock {
  public:
   void begin();
   bool isAvailable() const { return _available; }
+  // Matches the firmware: an RTC-less board can still report a time from the
+  // system clock, which on a host is always set.
+  bool hasTime() const { return _available || systemTimeValid(); }
   bool getTime(uint8_t& hour, uint8_t& minute) const;
   bool getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const;
   bool formatTime(char* buf, size_t bufSize,
@@ -23,6 +26,12 @@ class HalClock {
   bool formatDate(char* buf, size_t bufSize,
                   uint8_t utcOffsetQuarterHoursBiased = 48) const;
   bool syncFromNTP();
+
+  // The firmware sets a POSIX TZ rule the newlib localtime_r then honours. The
+  // host has the same mechanism, so apply it for real rather than stubbing it:
+  // the timezone setting then has a visible effect in the simulator, which is
+  // the point of being able to test it here. nullptr/empty falls back to UTC.
+  void setTimezone(const char* posixTz);
 
   // True when the system clock has ever been set. On a host it always has been
   // -- there is no unset-RTC state to recover from.
