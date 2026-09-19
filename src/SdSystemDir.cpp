@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstring>
+
 namespace sdsystem {
 namespace {
 constexpr const char* HIDDEN = "/.system";
@@ -34,6 +36,17 @@ std::string path(const char* leaf) {
     out += leaf;
   }
   return out;
+}
+
+std::string findUserFile(const char* leaf) {
+  std::string resolved = path(leaf);
+  if (Storage.exists(resolved.c_str())) return resolved;
+  std::string other = std::string(std::strcmp(dir(), HIDDEN) == 0 ? VISIBLE : HIDDEN) + "/" + (leaf ? leaf : "");
+  if (Storage.exists(other.c_str())) {
+    LOG_INF("SDSYS", "Using %s (outside %s)", other.c_str(), dir());
+    return other;
+  }
+  return resolved;
 }
 
 }  // namespace sdsystem

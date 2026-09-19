@@ -19,4 +19,10 @@ const char* dir();
 // and a fixed buffer here would be one more thing to size wrongly.
 std::string path(const char* leaf);
 
+// For a file the USER puts in the folder rather than one the firmware writes (the API key): the
+// resolved folder's copy if it has one, else the other spelling's. On a fresh card dir() creates
+// "/.system", so someone following an on-screen "/system/" hint would otherwise never be found.
+// Falls back to path(leaf) when neither has it, so the caller's not-found message still applies.
+std::string findUserFile(const char* leaf);
+
 }  // namespace sdsystem
