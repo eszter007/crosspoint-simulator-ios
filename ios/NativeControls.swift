@@ -5,7 +5,13 @@ private struct HardwareButton: View {
   let symbol: String
   let label: String
   let pressed: (Bool) -> Void
-  @State private var isDown = false
+  // GestureState, not @State: SwiftUI resets it when the gesture ends AND when the gesture is
+  // cancelled or interrupted -- a finger that slides off the key, a system edge gesture claiming
+  // the touch, the app losing the scene. onEnded does NOT run in those cases, so a plain flag
+  // stayed true: the key looked held to the firmware for good, and every later press was
+  // swallowed by the "already down" guard. On device that showed as a key working once and then
+  // going dead. Driving the up off the reset is what guarantees a release for every press.
+  @GestureState private var isDown = false
 
   var body: some View {
     // Not a Button: its action runs on release, so sending the down and the up
@@ -26,16 +32,8 @@ private struct HardwareButton: View {
           .fill(Color.secondary.opacity(isDown ? 0.38 : 0.16)))
       .gesture(
         DragGesture(minimumDistance: 0)
-          .onChanged { _ in
-            guard !isDown else { return }  // onChanged repeats while held
-            isDown = true
-            pressed(true)
-          }
-          .onEnded { _ in
-            guard isDown else { return }
-            isDown = false
-            pressed(false)
-          })
+          .updating($isDown) { _, state, _ in state = true })
+      .onChange(of: isDown) { _, down in pressed(down) }
       .accessibilityLabel(label)
       .accessibilityAddTraits(.isButton)
   }
