@@ -200,6 +200,21 @@ file(GLOB_RECURSE SDK_SOURCES
   # allocates its interval tables through it whether or not the TTF engine is compiled in.
   "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/FontAlloc.c")
 
+# Runtime TTF/OTF rendering. On device this is gated on BOARD_HAS_PSRAM because FreeType's
+# working set does not fit beside the section build in the ESP32-C3's internal DRAM. The host has
+# no such ceiling, so the simulator can carry it and exercise the .ttf path.
+option(SIMULATOR_VECTOR_FONTS "Compile the TTF/OTF engine (FreeType) into the simulator" ON)
+if(SIMULATOR_VECTOR_FONTS)
+  file(GLOB FREETYPE_SOURCES "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/freetype/*.c")
+  list(APPEND SDK_SOURCES
+    "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/FtFont.cpp"
+    "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/TtfFont.cpp"
+    "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/Gpos.cpp"
+    "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/Gsub.cpp"
+    ${FREETYPE_SOURCES})
+  # The firmware's own TtfEpdFont sits behind the same gate in lib/EpdFont.
+  list(APPEND FIRMWARE_SOURCES "${CROSSPOINT_FIRMWARE_ROOT}/lib/EpdFont/TtfEpdFont.cpp")
+endif()
 
 # --- third-party Arduino libraries ---------------------------------------------
 # PlatformIO resolves these from lib_deps; CMake fetches them at the same pinned
@@ -283,6 +298,18 @@ list(FILTER FIRMWARE_HEADER_DIRS EXCLUDE REGEX "${CROSSPOINT_FIRMWARE_ROOT}/lib/
 list(APPEND FIRMWARE_INCLUDES ${FIRMWARE_HEADER_DIRS})
 file(GLOB SDK_INCLUDE_DIRS "${FREEINK_SDK_ROOT}/libs/*/*/include")
 list(APPEND FIRMWARE_INCLUDES ${SDK_INCLUDE_DIRS})
+
+if(SIMULATOR_VECTOR_FONTS)
+  # BOARD_HAS_PSRAM is what VectorFontSupport.h gates CROSSPOINT_VECTOR_FONTS on. It claims only
+  # that the board can afford FreeType, which a host can; HalMemory still reports no PSRAM heap,
+  # so the cover cache and font arenas keep their internal-heap paths.
+  target_compile_definitions(crosspoint_simulator PRIVATE
+    BOARD_HAS_PSRAM
+    FREEINK_FONT_ENABLE_AUTOHINT=1)
+  list(APPEND FIRMWARE_INCLUDES
+    "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/third_party/freetype/include"
+    "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/third_party/stb")
+endif()
 
 target_include_directories(crosspoint_simulator PRIVATE ${FIRMWARE_INCLUDES})
 
