@@ -45,6 +45,11 @@ inline int digitalRead(int /*pin*/) { return 1; }
 // For FREEINK_MCU_C3, so the reported chip follows the selected board.
 #include "BoardConfig.h"
 
+// Arduino-ESP32 sizes the loop task's stack with this at link time, and the firmware raises it
+// for FreeType. Rendering here runs on the host thread with an ordinary stack, so it expands to
+// nothing.
+#define SET_LOOP_TASK_STACK_SIZE(bytes)
+
 struct ESPMock {
   static constexpr uint32_t HEAP_SIZE = 1024 * 1024;
 

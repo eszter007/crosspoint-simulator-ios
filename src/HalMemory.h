@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 
 // Mirrors the firmware's HalMemory. The host has one ordinary heap, so the
 // capability-specific views all answer from the same figures ESPMock reports
@@ -18,5 +20,14 @@ public:
 
   static HeapStats getDefaultHeap();
   static HeapStats getInternalHeap();
+  struct PsramDeleter {
+    void operator()(uint8_t *buffer) const;
+  };
+  using PsramBuffer = std::unique_ptr<uint8_t[], PsramDeleter>;
+  // The host has no PSRAM, and the contract is never to fall back to internal RAM, so this
+  // always returns null. Callers treat that as "render uncached", which is the same path the
+  // no-PSRAM ESP32-C3 boards take.
+  static PsramBuffer allocatePsram(size_t bytes);
+
   static HeapStats getPsramHeap();
 };

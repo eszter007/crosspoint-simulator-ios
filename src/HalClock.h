@@ -33,6 +33,9 @@ class HalClock {
   // the point of being able to test it here. nullptr/empty falls back to UTC.
   void setTimezone(const char* posixTz);
 
+  // Current wall-clock time in the configured timezone.
+  bool localTime(struct tm& out) const;
+
   // True when the system clock has ever been set. On a host it always has been
   // -- there is no unset-RTC state to recover from.
   static bool systemTimeValid();

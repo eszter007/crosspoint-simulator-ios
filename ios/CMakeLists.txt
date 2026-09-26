@@ -195,7 +195,11 @@ endforeach()
 # FreeInk SDK pieces the PlatformIO env symlinks in as libraries.
 file(GLOB_RECURSE SDK_SOURCES
   "${FREEINK_SDK_ROOT}/libs/ui/FreeInkUI/src/*.cpp"
-  "${FREEINK_SDK_ROOT}/libs/assets/Icons/src/*.cpp")
+  "${FREEINK_SDK_ROOT}/libs/assets/Icons/src/*.cpp"
+  # FreeInkFont's PSRAM-preferring allocator (fiFontMalloc/fiFontFree). The SD-card font path
+  # allocates its interval tables through it whether or not the TTF engine is compiled in.
+  "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/FontAlloc.c")
+
 
 # --- third-party Arduino libraries ---------------------------------------------
 # PlatformIO resolves these from lib_deps; CMake fetches them at the same pinned

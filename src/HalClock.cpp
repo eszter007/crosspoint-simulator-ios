@@ -157,3 +157,10 @@ time_t HalClock::localEpoch(uint8_t utcOffsetQuarterHoursBiased) {
   const int offsetQuarterHours = static_cast<int>(utcOffsetQuarterHoursBiased) - 48;
   return std::time(nullptr) + static_cast<time_t>(offsetQuarterHours) * 15 * 60;
 }
+
+bool HalClock::localTime(struct tm &out) const {
+  if (!_available)
+    return false;
+  const time_t now = time(nullptr);
+  return localtime_r(&now, &out) != nullptr;
+}
