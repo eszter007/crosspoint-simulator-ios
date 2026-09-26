@@ -98,6 +98,12 @@ struct LiveTouchEvent {
   LiveTouchAction action;
   float logicalNx;
   float logicalNy;
+  // When the contact actually happened, not when the firmware gets round to it.
+  // processLiveTouchEvent() releases at most one event per input frame, and an
+  // e-ink render can sit between two frames, so timing the gesture at
+  // processing time inflated it past TOUCH_SWIPE_MAX_MS and silently dropped
+  // every swipe while taps (which have no duration test) still worked.
+  unsigned long atMs;
 };
 std::deque<LiveTouchEvent> liveTouchEvents;
 SDL_FingerID activeFingerId = 0;
@@ -236,7 +242,7 @@ void updateTouchMovement(float panelNx, float panelNy) {
   }
 }
 
-void beginTouch(float logicalNx, float logicalNy) {
+void beginTouch(float logicalNx, float logicalNy, unsigned long atMs) {
   if (!BoardConfig::hasTouch())
     return;
   float panelNx = 0.0f;
@@ -254,7 +260,7 @@ void beginTouch(float logicalNx, float logicalNy) {
   touchState.startNy = panelNy;
   touchState.currentNx = panelNx;
   touchState.currentNy = panelNy;
-  touchState.pressedAt = SDL_GetTicks();
+  touchState.pressedAt = atMs;
 }
 
 void moveTouch(float logicalNx, float logicalNy) {
@@ -266,14 +272,14 @@ void moveTouch(float logicalNx, float logicalNy) {
   updateTouchMovement(panelNx, panelNy);
 }
 
-void endTouch(float logicalNx, float logicalNy) {
+void endTouch(float logicalNx, float logicalNy, unsigned long atMs) {
   if (!touchState.down)
     return;
   moveTouch(logicalNx, logicalNy);
   touchState.down = false;
   touchState.releasedThisFrame = true;
   touchState.activityThisFrame = true;
-  touchState.lastHeldMs = SDL_GetTicks() - touchState.pressedAt;
+  touchState.lastHeldMs = atMs - touchState.pressedAt;
 }
 
 void updateTouchHold() {
@@ -500,13 +506,13 @@ void processLiveTouchEvent() {
 
   switch (event.action) {
   case LiveTouchAction::Down:
-    beginTouch(event.logicalNx, event.logicalNy);
+    beginTouch(event.logicalNx, event.logicalNy, event.atMs);
     break;
   case LiveTouchAction::Move:
     moveTouch(event.logicalNx, event.logicalNy);
     break;
   case LiveTouchAction::Up:
-    endTouch(event.logicalNx, event.logicalNy);
+    endTouch(event.logicalNx, event.logicalNy, event.atMs);
     break;
   }
   touchEventProcessedFrame = inputFrameCounter;
@@ -533,10 +539,10 @@ void processSyntheticEvents() {
       syntheticButtonDown[event.button] = false;
       break;
     case SyntheticAction::TouchDown:
-      beginTouch(event.logicalNx, event.logicalNy);
+      beginTouch(event.logicalNx, event.logicalNy, event.atMs);
       break;
     case SyntheticAction::TouchUp:
-      endTouch(event.logicalNx, event.logicalNy);
+      endTouch(event.logicalNx, event.logicalNy, event.atMs);
       break;
     case SyntheticAction::HomeDown:
       beginHomeKey();
@@ -778,7 +784,7 @@ void HalGPIO::update() {
         activeFinger = true;
         activeFingerId = e.tfinger.fingerId;
         liveTouchEvents.push_back(
-            {LiveTouchAction::Down, logicalNx, logicalNy});
+            {LiveTouchAction::Down, logicalNx, logicalNy, SDL_GetTicks()});
       }
     } else if (e.type == SDL_FINGERMOTION && activeFinger &&
                e.tfinger.fingerId == activeFingerId) {
@@ -786,13 +792,14 @@ void HalGPIO::update() {
       float logicalNy = 0.0f;
       if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false))
         liveTouchEvents.push_back(
-            {LiveTouchAction::Move, logicalNx, logicalNy});
+            {LiveTouchAction::Move, logicalNx, logicalNy, SDL_GetTicks()});
     } else if (e.type == SDL_FINGERUP && activeFinger &&
                e.tfinger.fingerId == activeFingerId) {
       float logicalNx = 0.0f;
       float logicalNy = 0.0f;
       if (fingerToLogicalNormalized(e.tfinger, logicalNx, logicalNy, false))
-        liveTouchEvents.push_back({LiveTouchAction::Up, logicalNx, logicalNy});
+        liveTouchEvents.push_back(
+            {LiveTouchAction::Up, logicalNx, logicalNy, SDL_GetTicks()});
       activeFinger = false;
     } else if (e.type == SDL_MOUSEBUTTONDOWN &&
                e.button.which != SDL_TOUCH_MOUSEID &&
@@ -810,7 +817,7 @@ void HalGPIO::update() {
       const float logicalNy =
           static_cast<float>(e.button.y) /
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
-      beginTouch(logicalNx, logicalNy);
+      beginTouch(logicalNx, logicalNy, SDL_GetTicks());
     } else if (e.type == SDL_MOUSEMOTION &&
                e.motion.which != SDL_TOUCH_MOUSEID &&
                !SimulatorOnScreenControls::capturing() && touchState.down) {
@@ -833,7 +840,7 @@ void HalGPIO::update() {
       const float logicalNy =
           static_cast<float>(e.button.y) /
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
-      endTouch(logicalNx, logicalNy);
+      endTouch(logicalNx, logicalNy, SDL_GetTicks());
     }
   }
   processLiveTouchEvent();
