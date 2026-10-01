@@ -99,6 +99,9 @@ public:
     return PNG_SUCCESS;
   }
   void close() { image_ = simulator_image::DecodedImage{}; }
+  // The firmware's vendored PNGdec takes a caller-owned scanline buffer; the stub decodes the
+  // whole image up front and needs none.
+  void setRowBuffer(uint8_t *, int) {}
   int getWidth() const { return image_.width; }
   int getHeight() const { return image_.height; }
   int getLastError() const { return lastError_; }
