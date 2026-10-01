@@ -503,6 +503,12 @@ bool HalStorage::openFileForWrite(const char *moduleName, const String &path,
                                   HalFile &file) {
   return openFileForWrite(moduleName, path.c_str(), file);
 }
+bool HalStorage::openFileForAppend(const char *moduleName, const char *path,
+                                   HalFile &file) {
+  (void)moduleName;
+  file = open(path, O_WRONLY | O_CREAT | O_APPEND);
+  return file.isOpen();
+}
 
 std::vector<String> HalStorage::listFiles(const char *path, int maxFiles) {
   std::vector<String> result;
