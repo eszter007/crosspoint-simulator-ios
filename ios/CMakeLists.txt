@@ -166,8 +166,8 @@ list(FILTER FIRMWARE_SOURCES EXCLUDE REGEX ".*/network/OtaUpdater\\.cpp$")
 list(FILTER FIRMWARE_SOURCES EXCLUDE REGEX ".*/platform/skip_efuse_blk_check\\.c$")
 
 # Firmware libraries. lib/hal is the on-device HAL the simulator replaces
-# (lib_ignore = hal); PNGdec (vendored in lib/) and JPEGDEC are skipped too, the
-# simulator decoding images with stb_image instead.
+# (lib_ignore = hal); PNGdec/JPEGDEC are ignored too, the simulator decoding
+# images with stb_image instead.
 #
 # Follows PlatformIO's library layout rule: a library with a src/ directory
 # exposes only that, and anything beside it is support material the src/ files
@@ -181,9 +181,7 @@ foreach(lib_dir ${FIRMWARE_LIB_DIRS_ALL})
     continue()
   endif()
   get_filename_component(lib_name "${lib_dir}" NAME)
-  # lib/PNGdec is the firmware's vendored decoder; the simulator decodes with stb_image behind
-  # its own src/PNGdec.h stub instead.
-  if(lib_name STREQUAL "hal" OR lib_name STREQUAL "PNGdec")
+  if(lib_name STREQUAL "hal")
     continue()
   endif()
   if(IS_DIRECTORY "${lib_dir}/src")
@@ -289,8 +287,6 @@ endforeach()
 list(REMOVE_DUPLICATES FIRMWARE_HEADER_DIRS)
 # lib/hal is replaced by the simulator's own HAL and must not shadow it.
 list(FILTER FIRMWARE_HEADER_DIRS EXCLUDE REGEX "${CROSSPOINT_FIRMWARE_ROOT}/lib/hal(/.*)?$")
-# Same for the vendored PNGdec: the simulator's stub must be the PNGdec.h that resolves.
-list(FILTER FIRMWARE_HEADER_DIRS EXCLUDE REGEX "${CROSSPOINT_FIRMWARE_ROOT}/lib/PNGdec(/.*)?$")
 # lib/Epub/Epub/blocks/ holds a Block.h, which shadows the Objective-C blocks
 # runtime header of that name when UIKit pulls it in. Nothing needs the
 # directory on the path: every reference to its headers is quoted, so it
