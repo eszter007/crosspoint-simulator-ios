@@ -73,6 +73,9 @@ public:
   // On device this reads the button ADC ladder directly to break an idle sleep
   // slice early. Here the raw level read is already the same answer.
   bool rawInputActive() { return anyButtonDownRaw(); }
+  // The firmware's serial remote control (CMD:PRESS / CMD:HOLD in debug builds) injects presses
+  // through this; the simulator has its own input and no serial console, so it drops them.
+  bool injectPress(uint8_t /*buttonIndex*/, uint16_t /*holdMs*/ = 0) { return false; }
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
