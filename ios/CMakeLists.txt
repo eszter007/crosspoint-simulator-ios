@@ -248,7 +248,8 @@ if(CROSSPOINT_IOS)
   set(IOS_RESOURCES "${CMAKE_CURRENT_SOURCE_DIR}/LaunchScreen.storyboard")
   set(IOS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/NativeControls.swift"
-    "${CMAKE_CURRENT_SOURCE_DIR}/SwiftControlsBridge.mm")
+    "${CMAKE_CURRENT_SOURCE_DIR}/SwiftControlsBridge.mm"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SimHttpFetchIOS.mm")
 endif()
 
 add_executable(crosspoint_simulator MACOSX_BUNDLE

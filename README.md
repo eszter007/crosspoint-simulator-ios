@@ -298,9 +298,11 @@ The SwiftUI controls are always on for iOS. On desktop the SDL strip is opt-in w
 ## Differences from the device
 
 - **Multi-touch** is not simulated; nothing in the firmware's HAL exposes it.
-- **No translation or OTA.** The firmware-update paths are excluded from the
-  simulator build, and iOS has no linkable libcurl, so the desktop simulator's
-  HTTP client is not built there either.
+- **No OTA.** The firmware-update paths are excluded from the simulator build.
+  HTTP itself works: iOS has no curl to spawn and no linkable libcurl, so the
+  requests the desktop simulator hands to curl go through `NSURLSession`
+  instead (`ios/SimHttpFetchIOS.mm`). Translate Page, OPDS and KOReader sync
+  reach the network through the fake Wi-Fi like on the desktop.
 - **Wall-clock speed.** E-ink refresh timing is not simulated: pages appear
   instantly rather than taking the panel's 1–2 s.
 - **Controls live outside SDL.** SwiftUI positions them against the measured

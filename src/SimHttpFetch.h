@@ -229,6 +229,14 @@ inline bool fetchWithCurl(const std::string &url, const char *method,
   return rc == 0 || out.statusCode > 0 || !out.body.empty();
 }
 
+#if defined(SIMULATOR_IOS)
+// iOS has neither a curl binary to spawn nor a linkable libcurl; the request
+// goes through NSURLSession instead (ios/SimHttpFetchIOS.mm).
+bool fetchNative(const std::string &url, const char *method,
+                 const std::map<std::string, std::string> &headers,
+                 const std::string &basicAuth, const char *body, Response &out);
+#endif
+
 inline bool fetch(const std::string &url, const char *method,
                   const std::map<std::string, std::string> &headers,
                   const std::string &basicAuth, const char *body, Response &out) {
@@ -237,7 +245,11 @@ inline bool fetch(const std::string &url, const char *method,
     return true;
   if (fetchFromFileUrl(url, out))
     return true;
+#if defined(SIMULATOR_IOS)
+  return fetchNative(url, method, headers, basicAuth, body, out);
+#else
   return fetchWithCurl(url, method, headers, basicAuth, body, out);
+#endif
 }
 
 } // namespace sim_http_fetch
