@@ -229,6 +229,12 @@ bool HalFile::seekCur(int64_t offset) {
   return lseek(impl->fd, (off_t)offset, SEEK_CUR) >= 0;
 }
 bool HalFile::seekSet(size_t offset) {
+  // A directory handle resumes where position() said it was: the firmware's
+  // library walk closes a directory to descend into a child and reopens it.
+  if (impl && impl->dir) {
+    seekdir(impl->dir, (long)offset);
+    return true;
+  }
   if (!impl || impl->fd < 0)
     return false;
   return lseek(impl->fd, (off_t)offset, SEEK_SET) >= 0;
@@ -242,6 +248,10 @@ int HalFile::available() const {
   return (int)(end - cur);
 }
 size_t HalFile::position() const {
+  if (impl && impl->dir) {
+    const long at = telldir(impl->dir);
+    return at < 0 ? 0 : (size_t)at;
+  }
   if (!impl || impl->fd < 0)
     return 0;
   off_t pos = lseek(impl->fd, 0, SEEK_CUR);
