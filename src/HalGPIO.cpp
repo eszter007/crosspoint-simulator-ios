@@ -539,10 +539,10 @@ void processSyntheticEvents() {
       syntheticButtonDown[event.button] = false;
       break;
     case SyntheticAction::TouchDown:
-      beginTouch(event.logicalNx, event.logicalNy, event.atMs);
+      beginTouch(event.logicalNx, event.logicalNy, SDL_GetTicks());
       break;
     case SyntheticAction::TouchUp:
-      endTouch(event.logicalNx, event.logicalNy, event.atMs);
+      endTouch(event.logicalNx, event.logicalNy, SDL_GetTicks());
       break;
     case SyntheticAction::HomeDown:
       beginHomeKey();
