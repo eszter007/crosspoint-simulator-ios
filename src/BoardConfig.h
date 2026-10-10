@@ -247,6 +247,7 @@ inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
 // Boards the simulator never impersonates.
 inline bool isEegoA4() { return false; }
 inline bool isM5PaperV11() { return false; }
+inline bool isMetalioEInk4() { return false; }
 inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
 inline bool hasHomeKey() { return isX4Pro(); }
 inline bool hasPwmFrontlight() { return isX4Pro() || isPaperMono(); }
