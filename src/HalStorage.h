@@ -43,6 +43,9 @@ public:
   // Stream the file contents to a `Print` (e.g. `Serial`, or any
   // `Print`-derived object). Returns true on success, false on failure.
   bool readFileToStream(const char *path, Print &out, size_t chunkSize = 256);
+  // Moves tmpPath over path (the SD-card atomic-replace used for journals and catalogs).
+  bool replaceFile(const char *tmpPath, const char *path);
+  bool readFileToString(const char *moduleName, const std::string &path, size_t cap, std::string &out);
   // Read up to `bufferSize-1` bytes into `buffer`, null-terminating it. Returns
   // bytes read.
   size_t readFileToBuffer(const char *path, char *buffer, size_t bufferSize,
@@ -121,6 +124,7 @@ public:
   bool seek64(uint64_t pos);
   bool seekCur(int64_t offset);
   bool seekSet(size_t offset);
+  bool truncate(uint64_t length);
   int available() const;
   size_t position() const;
   int read(void *buf, size_t count);

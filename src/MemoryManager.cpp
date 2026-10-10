@@ -29,3 +29,5 @@ bool MemoryManager::ensureFree(size_t, MemPool) { return true; }
 size_t MemoryManager::freeBytes(MemPool) const { return ESP.getFreeHeap(); }
 
 }  // namespace freeink
+
+size_t freeink::MemoryManager::clearCaches(size_t) { return 0; }

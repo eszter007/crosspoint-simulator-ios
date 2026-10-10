@@ -114,6 +114,18 @@ public:
   long clientContentLength();
   HTTPUpload &upload();
 
+protected:
+  // Mirrors Arduino's WebServer argument storage so firmware that releases it
+  // between requests (CrossPointHttpServer) compiles; the stub never fills it.
+  struct RequestArgument {
+    String key;
+    String value;
+  };
+  int _currentArgCount = 0;
+  RequestArgument *_currentArgs = nullptr;
+  int _postArgsLen = 0;
+  RequestArgument *_postArgs = nullptr;
+
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

@@ -4,21 +4,24 @@
 #include <cstdint>
 #include <memory>
 
+#include "Print.h"
 #include "WString.h"
 
 class Stream;
 
-class NetworkClient {
+// Derives from Print as on the device, so firmware can stream a file into a client.
+class NetworkClient : public Print {
 public:
+  using Print::write;
   NetworkClient() {}
   explicit NetworkClient(int fd);
   virtual ~NetworkClient() {}
   virtual int connect(const char *host, uint16_t port);
-  virtual size_t write(const uint8_t *buf, size_t size);
+  size_t write(const uint8_t *buf, size_t size) override;
   virtual size_t write(const char *str) {
     return write((const uint8_t *)str, strlen(str));
   }
-  virtual size_t write(uint8_t c) { return write(&c, 1); }
+  size_t write(uint8_t c) override { return write(&c, 1); }
   virtual size_t write(Stream &stream);
   template <typename T> size_t write(T &streamLike) {
     uint8_t buffer[4096];

@@ -65,6 +65,11 @@ public:
   // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;
+  // Capacitive page strip (eego A4) and deep-sleep pin prep: nothing to emulate.
+  bool wasCapacitivePagePressed() const { return false; }
+  bool isCapacitivePagePressed(uint8_t) const { return false; }
+  void prepareForDeepSleep() {}
+  bool coldBootImpliesPowerButton() const { return false; }
   // Live read, independent of the per-frame edge latches. Long background steps
   // (cover thumbnail generation) run without ticking update(), so the latched
   // state is stale there; this lets them notice a press and bail out. Consumes

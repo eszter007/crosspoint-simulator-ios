@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <cctype>
 #include <string>
 
 class String {
@@ -110,6 +111,13 @@ public:
     replace(find.s.c_str(), replaceWith.s.c_str());
   }
   bool isEmpty() const { return s.empty(); }
+  void toLowerCase() { for (auto &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c))); }
+  void toUpperCase() { for (auto &c : s) c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+  const char *begin() const { return s.data(); }
+  const char *end() const { return s.data() + s.size(); }
+  void remove(unsigned int index) { if (index < s.size()) s.erase(index); }
+  void remove(unsigned int index, unsigned int count) { if (index < s.size()) s.erase(index, count); }
+  bool reserve(unsigned int size) { s.reserve(size); return true; }
   size_t length() const { return s.length(); }
   const char *c_str() const { return s.c_str(); }
   bool operator==(const char *other) const { return s == (other ? other : ""); }

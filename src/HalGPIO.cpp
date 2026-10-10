@@ -126,6 +126,7 @@ enum class SyntheticAction {
   KeyDown,
   KeyUp,
   TouchDown,
+  TouchMove,
   TouchUp,
   HomeDown,
   HomeUp,
@@ -439,6 +440,18 @@ void initializeSyntheticEvents() {
                            duration, swipe)) {
           syntheticEvents.push_back(
               {atMs, SyntheticAction::TouchDown, -1, x1, y1});
+          // A swipe samples the finger along the way, as a real drag does, so
+          // held-position consumers (selection handles) follow it before the
+          // release lands.
+          if (swipe) {
+            constexpr int kSamples = 12;
+            for (int i = 1; i < kSamples; ++i) {
+              const float t = static_cast<float>(i) / kSamples;
+              syntheticEvents.push_back(
+                  {atMs + duration * i / kSamples, SyntheticAction::TouchMove,
+                   -1, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t});
+            }
+          }
           syntheticEvents.push_back(
               {atMs + duration, SyntheticAction::TouchUp, -1, x2, y2});
         }
@@ -540,6 +553,9 @@ void processSyntheticEvents() {
       break;
     case SyntheticAction::TouchDown:
       beginTouch(event.logicalNx, event.logicalNy, SDL_GetTicks());
+      break;
+    case SyntheticAction::TouchMove:
+      moveTouch(event.logicalNx, event.logicalNy);
       break;
     case SyntheticAction::TouchUp:
       endTouch(event.logicalNx, event.logicalNy, SDL_GetTicks());

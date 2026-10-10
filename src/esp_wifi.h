@@ -9,4 +9,8 @@ enum wifi_ps_type_t {
 };
 
 inline esp_err_t esp_wifi_set_ps(wifi_ps_type_t) { return ESP_OK; }
+inline esp_err_t esp_wifi_get_ps(wifi_ps_type_t *type) {
+  if (type) *type = static_cast<wifi_ps_type_t>(0);
+  return ESP_OK;
+}
 inline esp_err_t esp_wifi_stop() { return ESP_OK; }

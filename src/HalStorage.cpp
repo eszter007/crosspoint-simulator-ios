@@ -538,3 +538,29 @@ std::vector<String> HalStorage::listFiles(const char *path, int maxFiles) {
   closedir(dir);
   return result;
 }
+
+bool HalStorage::readFileToString(const char *moduleName, const std::string &path, size_t cap, std::string &out) {
+  (void)moduleName;
+  out.clear();
+  HalFile file;
+  if (!openFileForRead(moduleName, path, file)) return false;
+  if (file.isDirectory()) return false;
+  const size_t size = file.fileSize();
+  if (size == 0 || size > cap) return false;
+  out.resize(size);
+  const int got = file.read(reinterpret_cast<uint8_t *>(&out[0]), size);
+  if (got != static_cast<int>(size)) {
+    out.clear();
+    return false;
+  }
+  return true;
+}
+
+bool HalFile::truncate(uint64_t length) {
+  if (!impl || impl->fd < 0 || impl->dir) return false;
+  return ftruncate(impl->fd, static_cast<off_t>(length)) == 0;
+}
+
+bool HalStorage::replaceFile(const char *tmpPath, const char *path) {
+  return rename(tmpPath, path);
+}

@@ -181,7 +181,8 @@ foreach(lib_dir ${FIRMWARE_LIB_DIRS_ALL})
     continue()
   endif()
   get_filename_component(lib_name "${lib_dir}" NAME)
-  if(lib_name STREQUAL "hal")
+  # TrustedTime is SNTP/NVS on the device; the simulator provides src/TrustedTime.cpp instead.
+  if(lib_name STREQUAL "hal" OR lib_name STREQUAL "TrustedTime")
     continue()
   endif()
   if(IS_DIRECTORY "${lib_dir}/src")
@@ -198,7 +199,14 @@ file(GLOB_RECURSE SDK_SOURCES
   "${FREEINK_SDK_ROOT}/libs/assets/Icons/src/*.cpp"
   # FreeInkFont's PSRAM-preferring allocator (fiFontMalloc/fiFontFree). The SD-card font path
   # allocates its interval tables through it whether or not the TTF engine is compiled in.
-  "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/FontAlloc.c")
+  "${FREEINK_SDK_ROOT}/libs/font/FreeInkFont/src/FontAlloc.c"
+  # Catalog list parsers (OPDS / plugin catalogs) and the protected-book container code. The
+  # wolfSSL crypto backend is left out: src/WolfsslCrypto.h stands in for it.
+  "${FREEINK_SDK_ROOT}/libs/network/CatalogList/src/*.cpp"
+  "${FREEINK_SDK_ROOT}/libs/network/JsonSax/src/*.cpp"
+  "${FREEINK_SDK_ROOT}/libs/book/ContentProtection/src/*.cpp"
+  "${FREEINK_SDK_ROOT}/libs/book/ContentProtection/src/vendor/miniz_impl.c")
+list(FILTER SDK_SOURCES EXCLUDE REGEX ".*/ContentProtection/src/WolfsslCrypto\\.cpp$")
 
 # Runtime TTF/OTF rendering. On device this is gated on BOARD_HAS_PSRAM because FreeType's
 # working set does not fit beside the section build in the ESP32-C3's internal DRAM. The host has
@@ -318,6 +326,11 @@ target_compile_definitions(crosspoint_simulator PRIVATE
   ${DEVICE_DEFINES}
   SIMULATOR
   CROSSPOINT_SIMULATOR_PROJECT_WEBSERVER
+  # ArduinoJson reads from and converts to the Arduino String the firmware uses; the host build
+  # defines no ARDUINO, so the library has to be told. Stream/Print support stays off.
+  ARDUINOJSON_ENABLE_ARDUINO_STRING=1
+  ARDUINOJSON_ENABLE_ARDUINO_STREAM=0
+  ARDUINOJSON_ENABLE_ARDUINO_PRINT=0
   CROSSPOINT_VERSION="dev-simulator"
   ENABLE_SERIAL_LOG
   LOG_LEVEL=2
