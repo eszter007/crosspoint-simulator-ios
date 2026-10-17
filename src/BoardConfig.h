@@ -154,6 +154,12 @@ struct BoardProfile {
   uint16_t displayWidth = 800;
   uint16_t displayHeight = 480;
   TouchConfig touch = {};
+  int8_t headerOffsetY = 0;
+  uint8_t cornerRadius = 0;
+  int8_t tabBarOffsetY = 0;
+  uint8_t tabBarHeightPct = 100;
+  uint8_t tabBarWidthPct = 100;
+  uint8_t wifiMaxTxPower = 0;
 };
 
 #if defined(SIMULATOR_DISPLAY_UC8179)

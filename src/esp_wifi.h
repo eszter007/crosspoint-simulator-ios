@@ -14,3 +14,5 @@ inline esp_err_t esp_wifi_get_ps(wifi_ps_type_t *type) {
   return ESP_OK;
 }
 inline esp_err_t esp_wifi_stop() { return ESP_OK; }
+
+inline esp_err_t esp_wifi_set_max_tx_power(int8_t) { return ESP_OK; }

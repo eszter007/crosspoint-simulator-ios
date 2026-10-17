@@ -63,12 +63,24 @@ public:
   bool operator!=(const IPAddress &o) const { return !(*this == o); }
 };
 
+enum arduino_event_id_t { ARDUINO_EVENT_WIFI_STA_START, ARDUINO_EVENT_WIFI_AP_START };
+struct arduino_event_info_t {};
+
 class WiFiClass {
   struct Network {
     String ssid;
     int32_t rssi;
     wifi_auth_mode_t auth;
   };
+
+ public:
+  // The simulator has no radio events; handlers are accepted and never fire.
+  template <typename F>
+  int onEvent(F, arduino_event_id_t) {
+    return 0;
+  }
+
+ private:
 
   wifi_mode_t currentMode = WIFI_OFF;
   wl_status_t currentStatus = WL_DISCONNECTED;

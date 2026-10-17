@@ -50,7 +50,42 @@ public:
   void setTimeout(uint16_t ms) { http_.setTimeout(ms); }
   void setReuse(bool reuse) { http_.setReuse(reuse); }
 
-  int GET() { return http_.GET(); }
+  int GET() {
+    status_ = http_.GET();
+    return status_;
+  }
+  // Streaming form: the stub fetches the whole body, then hands it over in one chunk.
+  int GET(const DataCallback &onData) {
+    status_ = http_.GET();
+    if (status_ < 0) return status_;
+    const std::string &body = getString();
+    if (!body.empty() && onData) onData(reinterpret_cast<const uint8_t *>(body.data()), body.size());
+    return status_;
+  }
+  int getStatus() const { return status_; }
+  bool hasContentLength() const { return const_cast<HTTPClient &>(http_).getSize() >= 0; }
+  size_t getContentLength() const {
+    const int size = const_cast<HTTPClient &>(http_).getSize();
+    return size > 0 ? static_cast<size_t>(size) : 0;
+  }
+  // Absolute locations as given; a path is resolved against the base's scheme and host.
+  static bool resolveUrl(const std::string &baseUrl, const std::string &location, std::string &resolved) {
+    if (location.find("://") != std::string::npos) {
+      resolved = location;
+      return true;
+    }
+    const size_t schemeEnd = baseUrl.find("://");
+    if (schemeEnd == std::string::npos) return false;
+    const size_t pathStart = baseUrl.find('/', schemeEnd + 3);
+    const std::string origin = pathStart == std::string::npos ? baseUrl : baseUrl.substr(0, pathStart);
+    if (!location.empty() && location[0] == '/') {
+      resolved = origin + location;
+      return true;
+    }
+    const std::string path = pathStart == std::string::npos ? "/" : baseUrl.substr(pathStart);
+    resolved = origin + path.substr(0, path.rfind('/') + 1) + location;
+    return true;
+  }
   int POST(const String &payload) { return http_.POST(payload.c_str()); }
   // The SDK declares POST on std::string; begin(), addHeader() and
   // sendRequest() already carry the matching overload and this one was missed.
@@ -112,6 +147,7 @@ private:
   HTTPClient http_;
   std::string body_;
   bool responseComplete_ = true;
+  int status_ = 0;
 };
 
 } // namespace freeink

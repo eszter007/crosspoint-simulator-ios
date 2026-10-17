@@ -143,13 +143,32 @@ bool saveRendererBmp(const std::string &path) {
   return saved;
 }
 
+// The panel's own pixels, without the phone frame: what a device screenshot shows.
+bool savePanelBmp(const std::string &path) {
+  const std::lock_guard<std::mutex> lock(pixelBufMutex);
+  SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
+      pixelBuf, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT, 32,
+      HalDisplay::DISPLAY_WIDTH * sizeof(uint32_t), SDL_PIXELFORMAT_ARGB8888);
+  if (!surface)
+    return false;
+  const bool saved = SDL_SaveBMP(surface, path.c_str()) == 0;
+  std::cerr << "[SIM] Saved panel screenshot: " << path << std::endl;
+  SDL_FreeSurface(surface);
+  return saved;
+}
+
 void captureDueScreenshots() {
   const unsigned long now = millis();
   for (auto &event : screenshotEvents) {
     if (event.handled || event.atMs > now)
       continue;
     event.handled = true;
-    saveRendererBmp(event.path);
+    // "*.panel.bmp" saves the bare panel instead of the whole window.
+    if (event.path.size() > 10 &&
+        event.path.compare(event.path.size() - 10, 10, ".panel.bmp") == 0)
+      savePanelBmp(event.path);
+    else
+      saveRendererBmp(event.path);
   }
 }
 

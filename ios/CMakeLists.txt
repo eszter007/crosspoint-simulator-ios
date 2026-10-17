@@ -204,6 +204,7 @@ file(GLOB_RECURSE SDK_SOURCES
   # wolfSSL crypto backend is left out: src/WolfsslCrypto.h stands in for it.
   "${FREEINK_SDK_ROOT}/libs/network/CatalogList/src/*.cpp"
   "${FREEINK_SDK_ROOT}/libs/network/JsonSax/src/*.cpp"
+  "${FREEINK_SDK_ROOT}/libs/network/Opds/src/*.cpp"
   "${FREEINK_SDK_ROOT}/libs/book/ContentProtection/src/*.cpp"
   "${FREEINK_SDK_ROOT}/libs/book/ContentProtection/src/vendor/miniz_impl.c")
 list(FILTER SDK_SOURCES EXCLUDE REGEX ".*/ContentProtection/src/WolfsslCrypto\\.cpp$")
