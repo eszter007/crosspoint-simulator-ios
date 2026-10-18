@@ -35,10 +35,11 @@ enum {
 #include <cstdint>
 #include <vector>
 
-// Scale options passed to decode()
-#define JPEG_SCALE_EIGHTH 4
-#define JPEG_SCALE_QUARTER 2
-#define JPEG_SCALE_HALF 1
+// Scale options passed to decode(). Same values as JPEGDEC's own: the firmware passes the plain
+// denominator (8, 4, 2), so any other value made the stub decode at full size.
+#define JPEG_SCALE_EIGHTH 8
+#define JPEG_SCALE_QUARTER 4
+#define JPEG_SCALE_HALF 2
 
 // Pixel output types
 #define EIGHT_BIT_GRAYSCALE 1
