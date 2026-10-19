@@ -62,6 +62,9 @@ inline std::chrono::milliseconds ticksToDuration(uint32_t ticks) {
 } // namespace sim_semaphore_detail
 
 inline SemaphoreHandle_t xSemaphoreCreateMutex() { return new SimMutex(); }
+// The storage argument only reserves space on the device; the simulator allocates instead.
+struct StaticSemaphore_t {};
+inline SemaphoreHandle_t xSemaphoreCreateMutexStatic(StaticSemaphore_t *) { return new SimMutex(); }
 
 inline SemaphoreHandle_t xSemaphoreCreateBinary() {
   return new SimBinarySemaphore();

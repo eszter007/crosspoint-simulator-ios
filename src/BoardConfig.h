@@ -38,6 +38,10 @@
 #undef FREEINK_DEVICE_STICKY
 #undef FREEINK_DEVICE_PAPERMONO
 
+// Read in expressions as well as #if, so it must be defined; the simulator is never a Picco.
+#undef FREEINK_DEVICE_PICCO
+#define FREEINK_DEVICE_PICCO 0
+
 #if defined(SIMULATOR_DEVICE_PAPERMONO)
 #define FREEINK_DEVICE_X4 0
 #define FREEINK_DEVICE_X3 0
@@ -254,6 +258,7 @@ inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
 inline bool isEegoA4() { return false; }
 inline bool isM5PaperV11() { return false; }
 inline bool isMetalioEInk4() { return false; }
+inline bool isPicco() { return false; }
 inline bool hasTouch() { return ACTIVE.touch.controller != TouchController::None; }
 inline bool hasHomeKey() { return isX4Pro(); }
 inline bool hasPwmFrontlight() { return isX4Pro() || isPaperMono(); }

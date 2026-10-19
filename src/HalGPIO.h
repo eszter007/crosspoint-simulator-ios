@@ -90,6 +90,9 @@ public:
   unsigned long getPowerButtonHeldTime() const;
   bool hasTouch() const;
   bool hasHomeKey() const;
+  // Picco slide switch; the simulator has none.
+  bool hasToggleSwitch() const { return false; }
+  bool isToggleSwitchOn() const { return false; }
   bool wasHomeKeyPressed() const;
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
