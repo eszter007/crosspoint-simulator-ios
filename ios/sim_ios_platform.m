@@ -17,6 +17,8 @@
 
 #include "SimulatorPlatform.h"
 
+#include <SDL_syswm.h>
+
 static NSString *const kBookmarkDefaultsKey = @"CrossPointSimulatorLibraryBookmark";
 
 // Resolved root, held for the process lifetime. simPlatformDocumentsPath() is
@@ -186,4 +188,48 @@ void simPlatformPickFolder(void) {
     picker.allowsMultipleSelection = NO;
     [presenter presentViewController:picker animated:YES completion:nil];
   });
+}
+
+// --- Scene lifecycle --------------------------------------------------------
+//
+// iOS 27 stops an app at launch unless it adopts UIScene. SDL2 predates scenes
+// and creates its UIWindow without one, so Info.plist names SimSceneDelegate and
+// the window is moved into that scene here. The scene may connect before or
+// after SDL creates the window, so whichever arrives second does the attaching.
+
+static UIWindowScene *gScene = nil;
+static UIWindow *gSDLWindow = nil;
+
+static void attachWindowToScene(void) {
+  if (!gScene || !gSDLWindow || gSDLWindow.windowScene == gScene) return;
+  gSDLWindow.windowScene = gScene;
+  [gSDLWindow makeKeyAndVisible];
+  // The controls look the key window up through the scene, which only works now.
+  simPlatformInstallControls();
+}
+
+@interface SimSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@end
+
+@implementation SimSceneDelegate
+- (UIWindow *)window {
+  return gSDLWindow;
+}
+- (void)setWindow:(UIWindow *)window {
+}
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions {
+  if (![scene isKindOfClass:UIWindowScene.class]) return;
+  gScene = (UIWindowScene *)scene;
+  attachWindowToScene();
+}
+@end
+
+void simPlatformAttachWindow(void *sdlWindow) {
+  SDL_SysWMinfo info;
+  SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo((SDL_Window *)sdlWindow, &info) || info.subsystem != SDL_SYSWM_UIKIT) return;
+  gSDLWindow = info.info.uikit.window;
+  attachWindowToScene();
 }

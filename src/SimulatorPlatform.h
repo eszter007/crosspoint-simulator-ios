@@ -25,6 +25,10 @@ bool simPlatformCanPickFolder(void);
 // Add the native iOS controls above the SDL view. No-op on desktop.
 void simPlatformInstallControls(void);
 
+// Put the SDL window (an SDL_Window *) into the app's UIWindowScene, which iOS
+// 27 requires and SDL2 does not do. No-op on desktop.
+void simPlatformAttachWindow(void *sdlWindow);
+
 #ifdef __cplusplus
 }
 #endif

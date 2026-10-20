@@ -12,5 +12,6 @@ extern "C" const char *simPlatformDocumentsPath(void) { return nullptr; }
 extern "C" void simPlatformPickFolder(void) {}
 extern "C" bool simPlatformCanPickFolder(void) { return false; }
 extern "C" void simPlatformInstallControls(void) {}
+extern "C" void simPlatformAttachWindow(void *) {}
 
 #endif

@@ -362,6 +362,7 @@ void HalDisplay::begin() {
   window = SDL_CreateWindow(WINDOW_TITLE, SDL_WINDOWPOS_UNDEFINED,
                             SDL_WINDOWPOS_UNDEFINED, winW, winH, windowFlags);
   sdl_renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+  simPlatformAttachWindow(window);
   simPlatformInstallControls();
 
   // Keep all rendering logic in logical coordinates; SDL maps to drawable

@@ -22,6 +22,25 @@
   <string>@MACOSX_BUNDLE_BUNDLE_VERSION@</string>
   <key>LSRequiresIPhoneOS</key>
   <true/>
+  <!-- iOS 27 requires the scene lifecycle; sim_ios_platform.m moves SDL's
+       window into this scene. -->
+  <key>UIApplicationSceneManifest</key>
+  <dict>
+    <key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+    <key>UISceneConfigurations</key>
+    <dict>
+      <key>UIWindowSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+          <key>UISceneConfigurationName</key>
+          <string>Default</string>
+          <key>UISceneDelegateClassName</key>
+          <string>SimSceneDelegate</string>
+        </dict>
+      </array>
+    </dict>
+  </dict>
   <key>UILaunchStoryboardName</key>
   <string>LaunchScreen</string>
 
