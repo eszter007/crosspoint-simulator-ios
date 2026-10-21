@@ -44,6 +44,8 @@ inline int digitalRead(int /*pin*/) { return 1; }
 #include "WString.h"
 // For FREEINK_MCU_C3, so the reported chip follows the selected board.
 #include "BoardConfig.h"
+// The ESP32 Arduino core makes esp_random() visible through Arduino.h.
+#include "esp_random.h"
 
 // Arduino-ESP32 sizes the loop task's stack with this at link time, and the firmware raises it
 // for FreeType. Rendering here runs on the host thread with an ordinary stack, so it expands to
