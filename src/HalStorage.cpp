@@ -113,6 +113,11 @@ public:
   int fd = -1;
   std::string path;
   DIR *dir = nullptr;
+  // Entries readdir() has returned since the directory was opened or rewound, "." and ".."
+  // included. This is the directory's position: a telldir() cookie is only valid for the DIR*
+  // that produced it, and the firmware's library walk reopens a directory and seeks back to
+  // where it left off, so a cookie would restart the listing and loop forever.
+  size_t dirPos = 0;
 
   bool open(const char *p, int flags) {
     path = p;
@@ -130,6 +135,7 @@ public:
   bool openAsDir(const char *p) {
     path = p;
     dir = opendir(p);
+    dirPos = 0;
     return dir != nullptr;
   }
 
@@ -232,8 +238,11 @@ bool HalFile::seekSet(size_t offset) {
   // A directory handle resumes where position() said it was: the firmware's
   // library walk closes a directory to descend into a child and reopens it.
   if (impl && impl->dir) {
-    seekdir(impl->dir, (long)offset);
-    return true;
+    rewinddir(impl->dir);
+    impl->dirPos = 0;
+    while (impl->dirPos < offset && readdir(impl->dir) != nullptr)
+      impl->dirPos++;
+    return impl->dirPos == offset;
   }
   if (!impl || impl->fd < 0)
     return false;
@@ -248,10 +257,8 @@ int HalFile::available() const {
   return (int)(end - cur);
 }
 size_t HalFile::position() const {
-  if (impl && impl->dir) {
-    const long at = telldir(impl->dir);
-    return at < 0 ? 0 : (size_t)at;
-  }
+  if (impl && impl->dir)
+    return impl->dirPos;
   if (!impl || impl->fd < 0)
     return 0;
   off_t pos = lseek(impl->fd, 0, SEEK_CUR);
@@ -297,8 +304,10 @@ bool HalFile::rename(const char *newPath) {
 }
 bool HalFile::isDirectory() const { return impl && impl->isDir(); }
 void HalFile::rewindDirectory() {
-  if (impl && impl->dir)
+  if (impl && impl->dir) {
     rewinddir(impl->dir);
+    impl->dirPos = 0;
+  }
 }
 bool HalFile::close() {
   if (!impl)
@@ -320,6 +329,7 @@ HalFile HalFile::openNextFile() {
     struct dirent *entry = readdir(impl->dir);
     if (!entry)
       return HalFile();
+    impl->dirPos++;
     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
       continue; // skip . and ..
 
