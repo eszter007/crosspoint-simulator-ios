@@ -164,6 +164,10 @@ struct BoardProfile {
   uint8_t tabBarHeightPct = 100;
   uint8_t tabBarWidthPct = 100;
   uint8_t wifiMaxTxPower = 0;
+  // Bottom status line offset and bottom-corner clearance, as in the SDK profile. No simulated
+  // board needs them; 0 keeps the theme position and falls back to cornerRadius.
+  int8_t statusBarOffsetY = 0;
+  uint8_t bottomCornerRadius = 0;
 };
 
 #if defined(SIMULATOR_DISPLAY_UC8179)

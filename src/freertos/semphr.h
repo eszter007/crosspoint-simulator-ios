@@ -65,6 +65,8 @@ inline SemaphoreHandle_t xSemaphoreCreateMutex() { return new SimMutex(); }
 // The storage argument only reserves space on the device; the simulator allocates instead.
 struct StaticSemaphore_t {};
 inline SemaphoreHandle_t xSemaphoreCreateMutexStatic(StaticSemaphore_t *) { return new SimMutex(); }
+// SimMutex is already recursive, so the recursive API is the same calls.
+inline SemaphoreHandle_t xSemaphoreCreateRecursiveMutexStatic(StaticSemaphore_t *b) { return xSemaphoreCreateMutexStatic(b); }
 
 inline SemaphoreHandle_t xSemaphoreCreateBinary() {
   return new SimBinarySemaphore();
@@ -154,3 +156,6 @@ inline int xQueuePeek(SemaphoreHandle_t sem, void *, uint32_t) {
   }
   return pdFALSE;
 }
+
+inline bool xSemaphoreTakeRecursive(SemaphoreHandle_t sem, uint32_t ticksToWait) { return xSemaphoreTake(sem, ticksToWait); }
+inline bool xSemaphoreGiveRecursive(SemaphoreHandle_t sem) { return xSemaphoreGive(sem); }
