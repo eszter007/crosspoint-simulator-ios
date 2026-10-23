@@ -126,10 +126,25 @@ endif()
 # injects a version string, which this build sets directly below.
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+# The device build compiles in only custom_i18n_builtin_langs and reads the rest as .cplang packs
+# from the SD card; match it, so the language screen behaves as on a device. The release version
+# names the language-packs-<version> release those packs come from.
+file(READ "${CROSSPOINT_FIRMWARE_ROOT}/platformio.ini" CROSSPOINT_INI)
+string(REGEX MATCH "custom_i18n_builtin_langs *= *([a-zA-Z,_-]+)" _ "${CROSSPOINT_INI}")
+set(CROSSPOINT_I18N_ARGS)
+if(CMAKE_MATCH_1)
+  set(CROSSPOINT_I18N_ARGS --builtin-langs "${CMAKE_MATCH_1}")
+endif()
+string(REGEX MATCH "\\[crosspoint\\][^[]*version *= *([^\n ]+)" _ "${CROSSPOINT_INI}")
+set(CROSSPOINT_BASE_VERSION "${CMAKE_MATCH_1}")
+# Optional: serve language packs from elsewhere, e.g. a local server while testing.
+set(CROSSPOINT_LANGUAGE_PACKS_URL "" CACHE STRING "Base URL for .cplang downloads (empty: the release)")
+
 if(EXISTS "${CROSSPOINT_FIRMWARE_ROOT}/scripts/gen_i18n.py")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" "${CROSSPOINT_FIRMWARE_ROOT}/scripts/gen_i18n.py"
             "${CROSSPOINT_FIRMWARE_ROOT}/lib/I18n/translations" "${CROSSPOINT_FIRMWARE_ROOT}/lib/I18n/"
+            ${CROSSPOINT_I18N_ARGS}
     WORKING_DIRECTORY "${CROSSPOINT_FIRMWARE_ROOT}"
     RESULT_VARIABLE gen_i18n_result
     OUTPUT_QUIET)
@@ -333,6 +348,8 @@ target_compile_definitions(crosspoint_simulator PRIVATE
   ARDUINOJSON_ENABLE_ARDUINO_STREAM=0
   ARDUINOJSON_ENABLE_ARDUINO_PRINT=0
   CROSSPOINT_VERSION="dev-simulator"
+  CROSSPOINT_BASE_VERSION="${CROSSPOINT_BASE_VERSION}"
+  $<$<BOOL:${CROSSPOINT_LANGUAGE_PACKS_URL}>:LANGUAGE_PACKS_URL="${CROSSPOINT_LANGUAGE_PACKS_URL}">
   ENABLE_SERIAL_LOG
   LOG_LEVEL=2
   EINK_DISPLAY_SINGLE_BUFFER_MODE=1
