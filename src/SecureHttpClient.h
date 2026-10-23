@@ -135,7 +135,8 @@ public:
   // client hands back a String by value, and a reference to that temporary
   // would dangle.
   const std::string &getString() {
-    body_ = http_.getString().c_str();
+    // .s, not .c_str(): a binary body (a .cplang pack, an image) holds zero bytes.
+    body_ = http_.getString().s;
     return body_;
   }
   int getSize() { return http_.getSize(); }
