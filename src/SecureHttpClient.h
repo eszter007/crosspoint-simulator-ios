@@ -28,6 +28,8 @@ public:
 
   bool begin(const std::string &url) { return begin(String(url)); }
   bool begin(const char *url) { return begin(String(url)); }
+  // The stub opens its connection when the request is sent, so there is nothing to do early.
+  bool connect(const AbortCallback & = nullptr) { return true; }
 
   void end() { http_.end(); }
 
