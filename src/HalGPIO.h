@@ -68,6 +68,8 @@ public:
   // Capacitive page strip (eego A4) and deep-sleep pin prep: nothing to emulate.
   bool wasCapacitivePagePressed() const { return false; }
   bool isCapacitivePagePressed(uint8_t) const { return false; }
+  bool wasCapacitivePageKeyPressed(uint8_t) const { return false; }
+  bool wasCapacitivePageKeyReleased(uint8_t) const { return false; }
   void prepareForDeepSleep() {}
   bool coldBootImpliesPowerButton() const { return false; }
   // Live read, independent of the per-frame edge latches. Long background steps
