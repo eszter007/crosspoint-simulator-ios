@@ -66,6 +66,12 @@ public:
   }
 };
 
+// Captive-portal middleware: the simulator has no access point, so it is never run.
+class Middleware {
+ public:
+  using Callback = std::function<bool()>;
+};
+
 class WebServer {
 public:
   WebServer(int port);
@@ -82,6 +88,7 @@ public:
   void collectHeaders(const char **headers, size_t count);
   void stop();
   void addHandler(RequestHandler *handler);
+  WebServer &addMiddleware(std::function<bool(WebServer &, Middleware::Callback)>) { return *this; }
   void send(int code, const char *content_type, const char *content);
   void send(int code, const char *content_type, const String &content) {
     send(code, content_type, content.c_str());
