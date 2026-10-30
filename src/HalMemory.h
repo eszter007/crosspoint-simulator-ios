@@ -24,9 +24,9 @@ public:
     void operator()(uint8_t *buffer) const;
   };
   using PsramBuffer = std::unique_ptr<uint8_t[], PsramDeleter>;
-  // The host has no PSRAM, and the contract is never to fall back to internal RAM, so this
-  // always returns null. Callers treat that as "render uncached", which is the same path the
-  // no-PSRAM ESP32-C3 boards take.
+  // No PSRAM by default, and the contract is never to fall back to internal RAM, so this returns
+  // null -- the path the no-PSRAM ESP32-C3 boards take. CROSSPOINT_SIM_PSRAM=<bytes> simulates a
+  // PSRAM board (the S3 boards have 8 MB): allocations then succeed up to that many bytes.
   static PsramBuffer allocatePsram(size_t bytes);
 
   static HeapStats getPsramHeap();
