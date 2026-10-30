@@ -1,4 +1,5 @@
 #include "HalStorage.h"
+#include <MatchaContainer.h>
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -118,6 +119,10 @@ public:
   // that produced it, and the firmware's library walk reopens a directory and seeks back to
   // where it left off, so a cookie would restart the listing and loop forever.
   size_t dirPos = 0;
+  // Set for an entry of a .matcha container: fd is the container, read through a window.
+  bool windowed = false;
+  off_t windowStart = 0;
+  off_t windowLength = 0;
 
   bool open(const char *p, int flags) {
     path = p;
@@ -182,9 +187,18 @@ size_t HalFile::getName(char *name, size_t len) {
   name[n] = '\0';
   return n;
 }
+void HalFile::setWindow(const uint32_t offset, const uint32_t length) {
+  impl->windowed = true;
+  impl->windowStart = offset;
+  impl->windowLength = length;
+  lseek(impl->fd, offset, SEEK_SET);
+}
+
 size_t HalFile::size() {
   if (!impl || impl->fd < 0)
     return 0;
+  if (impl->windowed)
+    return static_cast<size_t>(impl->windowLength);
   off_t cur = lseek(impl->fd, 0, SEEK_CUR);
   off_t end = lseek(impl->fd, 0, SEEK_END);
   lseek(impl->fd, cur, SEEK_SET);
@@ -217,14 +231,12 @@ uint32_t HalFile::modifiedStamp() {
 
 size_t HalFile::fileSize() { return size(); }
 uint64_t HalFile::fileSize64() { return size(); }
-bool HalFile::seek(size_t pos) {
-  if (!impl || impl->fd < 0)
-    return false;
-  return lseek(impl->fd, (off_t)pos, SEEK_SET) >= 0;
-}
+bool HalFile::seek(size_t pos) { return seekSet(pos); }
 bool HalFile::seek64(uint64_t pos) {
   if (!impl || impl->fd < 0)
     return false;
+  if (impl->windowed)
+    return pos <= static_cast<uint64_t>(impl->windowLength) && seekSet(static_cast<size_t>(pos));
   if (pos > static_cast<uint64_t>(std::numeric_limits<off_t>::max()))
     return false;
   return lseek(impl->fd, static_cast<off_t>(pos), SEEK_SET) >= 0;
@@ -232,6 +244,10 @@ bool HalFile::seek64(uint64_t pos) {
 bool HalFile::seekCur(int64_t offset) {
   if (!impl || impl->fd < 0)
     return false;
+  if (impl->windowed) {
+    const int64_t target = static_cast<int64_t>(position()) + offset;
+    return target >= 0 && seekSet(static_cast<size_t>(target));
+  }
   return lseek(impl->fd, (off_t)offset, SEEK_CUR) >= 0;
 }
 bool HalFile::seekSet(size_t offset) {
@@ -246,11 +262,18 @@ bool HalFile::seekSet(size_t offset) {
   }
   if (!impl || impl->fd < 0)
     return false;
+  if (impl->windowed) {
+    if (static_cast<off_t>(offset) > impl->windowLength)
+      return false;
+    return lseek(impl->fd, impl->windowStart + (off_t)offset, SEEK_SET) >= 0;
+  }
   return lseek(impl->fd, (off_t)offset, SEEK_SET) >= 0;
 }
 int HalFile::available() const {
   if (!impl || impl->fd < 0)
     return 0;
+  if (impl->windowed)
+    return static_cast<int>(impl->windowLength - static_cast<off_t>(position()));
   off_t cur = lseek(impl->fd, 0, SEEK_CUR);
   off_t end = lseek(impl->fd, 0, SEEK_END);
   lseek(impl->fd, cur, SEEK_SET);
@@ -262,16 +285,27 @@ size_t HalFile::position() const {
   if (!impl || impl->fd < 0)
     return 0;
   off_t pos = lseek(impl->fd, 0, SEEK_CUR);
+  if (impl->windowed)
+    pos -= impl->windowStart;
   return pos < 0 ? 0 : (size_t)pos;
 }
 int HalFile::read(void *buf, size_t count) {
   if (!impl || impl->fd < 0)
     return -1;
+  if (impl->windowed) {
+    const off_t left = impl->windowLength - static_cast<off_t>(position());
+    if (left <= 0)
+      return 0;
+    if (static_cast<off_t>(count) > left)
+      count = static_cast<size_t>(left);
+  }
   ssize_t n = ::read(impl->fd, buf, count);
   return (int)n;
 }
 int HalFile::read() {
   if (!impl || impl->fd < 0)
+    return -1;
+  if (impl->windowed && static_cast<off_t>(position()) >= impl->windowLength)
     return -1;
   uint8_t c;
   return (::read(impl->fd, &c, 1) == 1) ? c : -1;
@@ -389,7 +423,20 @@ bool HalStorage::mkdir(const char *path, const bool /*pFlag*/) {
   }
   return ::mkdir(full.c_str(), 0777) == 0 || errno == EEXIST;
 }
+namespace {
+bool readContainerAt(void *ctx, const uint32_t offset, void *buf, const size_t n) {
+  auto &file = *static_cast<HalFile *>(ctx);
+  return file.seekSet(offset) && file.read(buf, n) == static_cast<int>(n);
+}
+} // namespace
+
 bool HalStorage::exists(const char *path) {
+  std::string container, entry;
+  if (matcha::splitPath(path, container, entry)) {
+    HalFile file;
+    matcha::Entry found;
+    return openFileForRead("HAL", container, file) && matcha::findEntry(readContainerAt, &file, entry, found);
+  }
   std::string full = resolveStoragePath(path);
   if (full.empty()) {
     return false;
@@ -494,6 +541,17 @@ bool HalStorage::ensureDirectoryExists(const char *path) { return mkdir(path); }
 
 bool HalStorage::openFileForRead(const char *moduleName, const char *path,
                                  HalFile &file) {
+  std::string container, entry;
+  if (matcha::splitPath(path, container, entry)) {
+    matcha::Entry found;
+    if (!openFileForRead(moduleName, container, file) || !matcha::findEntry(readContainerAt, &file, entry, found) ||
+        found.isDirectory()) {
+      file = HalFile();
+      return false;
+    }
+    file.setWindow(found.offset, found.size);
+    return true;
+  }
   file = open(path, O_RDONLY);
   return file.isOpen();
 }
