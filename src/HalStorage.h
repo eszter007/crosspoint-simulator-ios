@@ -144,7 +144,7 @@ public:
 private:
   // Narrows a read-only file to [offset, offset + length): an entry inside a .matcha container
   // (see the firmware's MatchaContainer.h). Positions, sizes and reads are relative to the entry.
-  void setWindow(uint32_t offset, uint32_t length);
+  bool setWindow(uint32_t offset, uint32_t length);
 };
 
 // Only do renaming FsFile to HalFile if this header is included by downstream

@@ -187,11 +187,11 @@ size_t HalFile::getName(char *name, size_t len) {
   name[n] = '\0';
   return n;
 }
-void HalFile::setWindow(const uint32_t offset, const uint32_t length) {
+bool HalFile::setWindow(const uint32_t offset, const uint32_t length) {
   impl->windowed = true;
   impl->windowStart = offset;
   impl->windowLength = length;
-  lseek(impl->fd, offset, SEEK_SET);
+  return lseek(impl->fd, offset, SEEK_SET) == static_cast<off_t>(offset);
 }
 
 size_t HalFile::size() {
@@ -545,11 +545,11 @@ bool HalStorage::openFileForRead(const char *moduleName, const char *path,
   if (matcha::splitPath(path, container, entry)) {
     matcha::Entry found;
     if (!openFileForRead(moduleName, container, file) || !matcha::findEntry(readContainerAt, &file, entry, found) ||
-        found.isDirectory()) {
+        found.isDirectory() || static_cast<uint64_t>(found.offset) + found.size > file.fileSize64() ||
+        !file.setWindow(found.offset, found.size)) {
       file = HalFile();
       return false;
     }
-    file.setWindow(found.offset, found.size);
     return true;
   }
   file = open(path, O_RDONLY);
