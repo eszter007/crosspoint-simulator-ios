@@ -58,6 +58,8 @@ public:
                          const String &uri) {
     return false;
   }
+  virtual bool canUpload(WebServer &request, const String &uri) { return false; }
+  virtual void upload(WebServer &request, const String &uri, HTTPUpload &upload) {}
   virtual bool canRaw(WebServer &request, const String &uri) { return false; }
   virtual void raw(WebServer &request, const String &uri, HTTPRaw &raw) {}
   virtual bool handle(WebServer &request, HTTPMethod method,

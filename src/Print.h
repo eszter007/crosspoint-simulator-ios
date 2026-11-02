@@ -17,6 +17,8 @@ public:
   virtual void flush() {}
 
   // Add missing overloads from Print
+  size_t write(const char *s) { return s ? write((const uint8_t *)s, strlen(s)) : 0; }
+  size_t write(const char *buffer, size_t size) { return write((const uint8_t *)buffer, size); }
   size_t print(const char *s) { return write((const uint8_t *)s, strlen(s)); }
   size_t println(const char *s) {
     size_t n = print(s);
