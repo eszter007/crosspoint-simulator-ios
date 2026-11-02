@@ -20,6 +20,10 @@ enum WStype_t {
   WStype_PONG,
 };
 
+#ifndef WEBSOCKETS_SERVER_CLIENT_MAX
+#define WEBSOCKETS_SERVER_CLIENT_MAX 5
+#endif
+
 class WebSocketsServer {
 public:
   explicit WebSocketsServer(int port);
@@ -32,6 +36,9 @@ public:
   void sendTXT(uint8_t num, const String &txt);
   void sendTXT(uint8_t num, const char *txt);
   void close();
+  // The idle-client sweep: the host stub does not track clients, so none is ever idle.
+  bool clientIsConnected(uint8_t) { return false; }
+  void disconnect(uint8_t) {}
 
 private:
   using EventCallback =
