@@ -15,6 +15,8 @@ public:
 
   GrayscaleCapabilities
   grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
+  // No probed driver in the simulator; About falls back to the board profile.
+  const char* controllerName() const { return nullptr; }
   bool supportsAsyncGrayscaleBase() const;
 
   // Constructor with pin configuration

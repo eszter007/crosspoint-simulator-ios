@@ -129,7 +129,7 @@ enum class DisplayController : uint8_t {
 // The SDK's optional capacitive touch controller. The simulator models touch as
 // present-or-not per board (hasTouch()), and reports the part the real board
 // carries so the About screen names it the same way.
-enum class TouchController : uint8_t { None, Chsc6x, Gt911, Ft5x06, Ft6336u, Gslx680 };
+enum class TouchController : uint8_t { None, Chsc6x, Gt911, Ft5x06, Ft6336u, Gslx680, Cst816s, Tma525c };
 
 struct ViewableInsets {
   uint8_t top = 9;

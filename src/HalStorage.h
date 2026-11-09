@@ -25,6 +25,12 @@ enum class UsbDriveState : uint8_t {
 
 class HalStorage {
 public:
+  // The simulator card has no fixed size: report none, as an unmounted card would.
+  uint64_t sdTotalBytes() { return 0; }
+  bool sdUsedBytes(uint64_t& usedBytes) {
+    usedBytes = 0;
+    return false;
+  }
   HalStorage();
   bool begin();
   bool ready() const;

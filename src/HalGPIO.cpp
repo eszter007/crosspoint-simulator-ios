@@ -934,6 +934,16 @@ unsigned long HalGPIO::getHeldTime() const {
         maxHeld = held;
     }
   }
+  if (maxHeld > 0)
+    return maxHeld;
+  // As the SDK does: on the release frame, how long the released key was held.
+  for (int i = 0; i < NUM_BUTTONS; i++) {
+    if (releasedThisFrame[i] && buttonPressTime[i] > 0) {
+      const unsigned long held = now - buttonPressTime[i];
+      if (held > maxHeld)
+        maxHeld = held;
+    }
+  }
   return maxHeld;
 }
 
