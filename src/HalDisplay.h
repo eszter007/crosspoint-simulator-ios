@@ -7,6 +7,7 @@ class HalDisplay {
 public:
   using Controller = BoardConfig::DisplayController;
   Controller getController() const;
+  const char* controllerName() const { return "Simulator"; }
 
   using GrayscaleMode = freeink::GrayscaleMode;
   using GrayscaleCapabilities = freeink::GrayscaleCapabilities;

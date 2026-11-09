@@ -60,6 +60,12 @@ public:
   HalFile open(const char *path, const oflag_t oflag = O_RDONLY);
   bool mkdir(const char *path, const bool pFlag = true);
   bool exists(const char *path);
+  // The simulated card reports no size; About shows it as unknown.
+  uint64_t sdTotalBytes() { return 0; }
+  bool sdUsedBytes(uint64_t &usedBytes) {
+    usedBytes = 0;
+    return false;
+  }
   bool remove(const char *path);
   bool rename(const char *oldPath, const char *newPath);
   bool rmdir(const char *path);
