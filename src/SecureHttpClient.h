@@ -13,144 +13,152 @@
 namespace freeink {
 
 class SecureHttpClient {
-public:
-  using DataCallback = std::function<bool(const uint8_t *, size_t)>;
+ public:
+  SecureHttpClient() {
+    http_.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    setTimeout(15000);  // SDK default
+  }
+  using DataCallback = std::function<bool(const uint8_t*, size_t)>;
   using AbortCallback = std::function<bool()>;
 
-  void setCACert(const char *) {}
+  void setCACert(const char*) {}
   void setInsecure() {}
-  void setUserAgent(const std::string &ua) { http_.addHeader("User-Agent", ua.c_str()); }
+  void setUserAgent(const std::string& agent) {
+    userAgent_ = agent;
+    http_.addHeader("User-Agent", agent.c_str());
+  }
+  void setBasicAuth(const std::string& user, const std::string& pass) {
+    authUser_ = user;
+    authPass_ = pass;
+    http_.setAuthorization(user.c_str(), pass.c_str());
+  }
+  void clearBasicAuth() { setBasicAuth("", ""); }
 
-  bool begin(const String &url) {
+  // Like the SDK, begin() drops the previous request's headers; the user agent
+  // and basic auth are client settings and stay.
+  bool begin(const String& url) {
+    http_.end();
     http_.begin(client_, url.c_str());
+    http_.addHeader("User-Agent", userAgent_.c_str());
+    if (!authUser_.empty()) http_.setAuthorization(authUser_.c_str(), authPass_.c_str());
+    callbackStopped_ = false;
+    aborted_ = false;
     return !url.isEmpty();
   }
 
-  bool begin(const std::string &url) { return begin(String(url)); }
-  bool begin(const char *url) { return begin(String(url)); }
-  // The stub opens its connection when the request is sent, so there is nothing to do early.
-  bool connect(const AbortCallback & = nullptr) { return true; }
+  bool begin(const std::string& url) { return begin(String(url)); }
+  bool begin(const char* url) { return begin(String(url)); }
+
+  // curl connects inside each request, so there is nothing to open early.
+  bool connect(const AbortCallback& shouldAbort = nullptr) {
+    aborted_ = shouldAbort && shouldAbort();
+    return !aborted_;
+  }
 
   void end() { http_.end(); }
 
-  void addHeader(const char *name, const String &value) {
-    http_.addHeader(name, value);
-  }
+  void addHeader(const char* name, const String& value) { http_.addHeader(name, value); }
 
-  void addHeader(const char *name, const std::string &value) {
-    http_.addHeader(name, value.c_str());
-  }
+  void addHeader(const char* name, const std::string& value) { http_.addHeader(name, value.c_str()); }
 
-  void addHeader(const char *name, const char *value) {
-    http_.addHeader(name, value);
-  }
+  void addHeader(const char* name, const char* value) { http_.addHeader(name, value); }
+  void addHeader(const std::string& name, const std::string& value) { http_.addHeader(name.c_str(), value.c_str()); }
 
-  void addHeader(const std::string &name, const std::string &value) {
-    http_.addHeader(name.c_str(), value.c_str());
+  // Like the SDK, one value limits both connecting and each wait for data.
+  void setTimeout(uint32_t ms) {
+    http_.setConnectTimeout(static_cast<int32_t>(ms));
+    http_.setTimeout(static_cast<uint16_t>(ms > UINT16_MAX ? UINT16_MAX : ms));
   }
-
-  void setTimeout(uint16_t ms) { http_.setTimeout(ms); }
   void setReuse(bool reuse) { http_.setReuse(reuse); }
 
-  int GET() {
-    status_ = http_.GET();
-    return status_;
+  int GET() { return http_.GET(); }
+  int POST(const String& payload) { return http_.POST(payload.c_str()); }
+  // The SDK declares POST on std::string as well.
+  int POST(const std::string& payload) { return http_.POST(payload.c_str()); }
+  int sendRequest(const char* method, const String& payload) { return http_.sendRequest(method, payload); }
+  int sendRequest(const char* method, const std::string& payload) { return sendRequest(method, String(payload)); }
+  int sendRequest(const char* method, const uint8_t* payload, size_t len) {
+    return sendRequest(method, std::string(reinterpret_cast<const char*>(payload), len));
   }
-  // Streaming form: the stub fetches the whole body, then hands it over in one chunk.
-  int GET(const DataCallback &onData) {
-    status_ = http_.GET();
-    if (status_ < 0) return status_;
-    const std::string &body = getString();
-    if (!body.empty() && onData) onData(reinterpret_cast<const uint8_t *>(body.data()), body.size());
-    return status_;
+
+  int sendRequest(const char* method, const uint8_t* payload, size_t len, const DataCallback& onData,
+                  const AbortCallback& shouldAbort = nullptr) {
+    aborted_ = shouldAbort && shouldAbort();
+    if (aborted_) return -1;
+    if (len && !payload) return -1;
+    const std::string requestBody = len ? std::string(reinterpret_cast<const char*>(payload), len) : std::string();
+    const int status = sendRequest(method, requestBody);
+    if (status < 0 || !http_.responseComplete()) return status;
+    const String body = http_.getString();
+    if (!body.s.empty() && onData && !onData(reinterpret_cast<const uint8_t*>(body.s.data()), body.s.size())) {
+      callbackStopped_ = true;
+    }
+    aborted_ = shouldAbort && shouldAbort();
+    return status;
   }
-  int getStatus() const { return status_; }
-  bool hasContentLength() const { return const_cast<HTTPClient &>(http_).getSize() >= 0; }
-  size_t getContentLength() const {
-    const int size = const_cast<HTTPClient &>(http_).getSize();
-    return size > 0 ? static_cast<size_t>(size) : 0;
+
+  int GET(const DataCallback& onData, const AbortCallback& shouldAbort = nullptr) {
+    return sendRequest("GET", nullptr, 0, onData, shouldAbort);
   }
-  // Absolute locations as given; a path is resolved against the base's scheme and host.
-  static bool resolveUrl(const std::string &baseUrl, const std::string &location, std::string &resolved) {
+
+  // The SDK returns `const std::string&`, and firmware binds the result
+  // straight to a std::string. Cached in a member because the Arduino-style
+  // client hands back a String by value, and a reference to that temporary
+  // would dangle. .s keeps binary bodies intact.
+  const std::string& getString() {
+    body_ = http_.getString().s;
+    return body_;
+  }
+  int getSize() { return http_.getSize(); }
+  int getStatus() const { return http_.getStatus(); }
+  bool hasContentLength() const { return http_.hasContentLength(); }
+  size_t getContentLength() const { return http_.getContentLength(); }
+  std::string getHeader(const std::string& name) const { return http_.getHeader(name); }
+  bool responseComplete() const { return http_.responseComplete() && !callbackStopped_ && !aborted_; }
+  bool aborted() const { return aborted_; }
+  bool callbackAborted() const { return callbackStopped_; }
+  // SDK setters with no behaviour here: redirects are handled by callers.
+  void setFollowRedirects(int) {}
+  void setAllowRedirectDowngrade(bool) {}
+  std::vector<std::pair<std::string, std::string>> getHeaders() const {
+    const auto& headers = http_.getHeaders();
+    return {headers.begin(), headers.end()};
+  }
+
+  static bool resolveUrl(const std::string& baseUrl, const std::string& location, std::string& resolved) {
     if (location.find("://") != std::string::npos) {
       resolved = location;
       return true;
     }
     const size_t schemeEnd = baseUrl.find("://");
     if (schemeEnd == std::string::npos) return false;
-    const size_t pathStart = baseUrl.find('/', schemeEnd + 3);
-    const std::string origin = pathStart == std::string::npos ? baseUrl : baseUrl.substr(0, pathStart);
-    if (!location.empty() && location[0] == '/') {
+    const size_t pathStart = baseUrl.find_first_of("/?#", schemeEnd + 3);
+    const std::string origin = baseUrl.substr(0, pathStart);
+    const std::string scheme = baseUrl.substr(0, schemeEnd);
+    if (location.rfind("//", 0) == 0) {
+      resolved = scheme + ":" + location;
+    } else if (!location.empty() && location.front() == '/') {
       resolved = origin + location;
-      return true;
+    } else {
+      std::string path = pathStart == std::string::npos ? "/" : baseUrl.substr(pathStart);
+      path.erase(path.find_first_of("?#") == std::string::npos ? path.size() : path.find_first_of("?#"));
+      const size_t slash = path.rfind('/');
+      resolved = origin + (slash == std::string::npos ? "/" : path.substr(0, slash + 1)) + location;
     }
-    const std::string path = pathStart == std::string::npos ? "/" : baseUrl.substr(pathStart);
-    resolved = origin + path.substr(0, path.rfind('/') + 1) + location;
     return true;
   }
-  int POST(const String &payload) { return http_.POST(payload.c_str()); }
-  // The SDK declares POST on std::string; begin(), addHeader() and
-  // sendRequest() already carry the matching overload and this one was missed.
-  int POST(const std::string &payload) { return http_.POST(payload.c_str()); }
-  int sendRequest(const char *method, const String &payload) {
-    if (method && std::string(method) == "PUT") {
-      return http_.PUT(payload);
-    }
-    if (method && std::string(method) == "POST") {
-      return http_.POST(payload.c_str());
-    }
-    return http_.GET();
-  }
-  int sendRequest(const char *method, const std::string &payload) {
-    return sendRequest(method, String(payload));
-  }
-  int sendRequest(const char *method, const uint8_t *payload, size_t payloadLen) {
-    return sendRequest(method, String(std::string(reinterpret_cast<const char *>(payload), payloadLen)));
-  }
-  // Streaming form: the stub fetches the whole body, then hands it over in one chunk.
-  int sendRequest(const char *method, const uint8_t *payload, size_t payloadLen, const DataCallback &onData,
-                  const AbortCallback &shouldAbort = nullptr) {
-    responseComplete_ = false;
-    const int status = sendRequest(method, payload, payloadLen);
-    if (status < 0) return status;
-    if (shouldAbort && shouldAbort()) return status;
-    const std::string &body = getString();
-    if (!body.empty() && onData &&
-        !onData(reinterpret_cast<const uint8_t *>(body.data()), body.size()))
-      return status;
-    responseComplete_ = true;
-    return status;
-  }
-  bool responseComplete() const { return responseComplete_; }
-  // SDK setters with no behaviour here: the stub follows the host's defaults.
-  void setBasicAuth(const std::string &user, const std::string &pass) { http_.setAuthorization(user.c_str(), pass.c_str()); }
-  void clearBasicAuth() {}
-  void setFollowRedirects(int) {}
-  void setAllowRedirectDowngrade(bool) {}
-  std::string getHeader(const std::string &) const { return {}; }
-  bool callbackAborted() const { return false; }
-  bool aborted() const { return false; }
-  std::vector<std::pair<std::string, std::string>> getHeaders() const { return {}; }
-
-  // The SDK returns `const std::string&`, and firmware binds the result
-  // straight to a std::string. Cached in a member because the Arduino-style
-  // client hands back a String by value, and a reference to that temporary
-  // would dangle.
-  const std::string &getString() {
-    // .s, not .c_str(): a binary body (a .cplang pack, an image) holds zero bytes.
-    body_ = http_.getString().s;
-    return body_;
-  }
-  int getSize() { return http_.getSize(); }
 
   static bool tls13Available() { return true; }
 
-private:
+ private:
   NetworkClientSecure client_;
   HTTPClient http_;
+  std::string userAgent_ = "FreeInk-ESP32";  // SDK default
+  std::string authUser_;
+  std::string authPass_;
   std::string body_;
-  bool responseComplete_ = true;
-  int status_ = 0;
+  bool callbackStopped_ = false;
+  bool aborted_ = false;
 };
 
-} // namespace freeink
+}  // namespace freeink

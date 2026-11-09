@@ -66,8 +66,6 @@ public:
   void update();
   bool isPressed(uint8_t buttonIndex) const;
   // Capacitive page strip (eego A4) and deep-sleep pin prep: nothing to emulate.
-  bool wasCapacitivePagePressed() const { return false; }
-  bool isCapacitivePagePressed(uint8_t) const { return false; }
   bool wasCapacitivePageKeyPressed(uint8_t) const { return false; }
   bool wasCapacitivePageKeyReleased(uint8_t) const { return false; }
   void prepareForDeepSleep() {}
@@ -77,9 +75,6 @@ public:
   // state is stale there; this lets them notice a press and bail out. Consumes
   // no edges -- the normal update()/wasPressed() path still sees the press.
   bool anyButtonDownRaw();
-  // On device this reads the button ADC ladder directly to break an idle sleep
-  // slice early. Here the raw level read is already the same answer.
-  bool rawInputActive() { return anyButtonDownRaw(); }
   // The firmware's serial remote control (CMD:PRESS / CMD:HOLD in debug builds) injects presses
   // through this; the simulator has its own input and no serial console, so it drops them.
   bool injectPress(uint8_t /*buttonIndex*/, uint16_t /*holdMs*/ = 0) { return false; }
@@ -90,17 +85,20 @@ public:
   bool isDebouncePending() const { return false; }
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+  bool rawInputActive();
+  bool wasCapacitivePagePressed() const;
+  bool isCapacitivePagePressed(uint8_t buttonIndex) const;
   bool hasTouch() const;
   bool hasHomeKey() const;
-  // Picco slide switch; the simulator has none.
-  bool hasToggleSwitch() const { return false; }
-  bool isToggleSwitchOn() const { return false; }
+  bool hasToggleSwitch() const;
+  bool isToggleSwitchOn() const;
   bool wasHomeKeyPressed() const;
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float &nx, float &ny) const;
   bool wasTouchDown(float &nx, float &ny) const;
   bool wasTouchReleased() const;
+  bool wasTouchReleasedAt(float &nx, float &ny) const;
   bool isTouchTapCandidate(float &nx, float &ny, unsigned long &heldMs) const;
   bool isTouchHeldAt(float &nx, float &ny) const;
   bool wasTouchLongPress(float &nx, float &ny) const;

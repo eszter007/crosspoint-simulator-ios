@@ -1,4 +1,7 @@
 #pragma once
+
+#include <sys/time.h>
+
 inline bool esp_sntp_enabled() { return true; }
 inline void esp_sntp_setoperatingmode(int) {}
 inline void esp_sntp_setservername(int, const char *) {}

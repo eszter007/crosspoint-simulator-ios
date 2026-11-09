@@ -38,6 +38,8 @@ struct SimBinarySemaphore : SimSemaphoreBase {
 };
 
 typedef SimSemaphoreBase *SemaphoreHandle_t;
+// The static API currently used by firmware is xSemaphoreCreateMutexStatic.
+using StaticSemaphore_t = SimMutex;
 
 namespace sim_semaphore_detail {
 
@@ -62,9 +64,11 @@ inline std::chrono::milliseconds ticksToDuration(uint32_t ticks) {
 } // namespace sim_semaphore_detail
 
 inline SemaphoreHandle_t xSemaphoreCreateMutex() { return new SimMutex(); }
-// The storage argument only reserves space on the device; the simulator allocates instead.
-struct StaticSemaphore_t {};
-inline SemaphoreHandle_t xSemaphoreCreateMutexStatic(StaticSemaphore_t *) { return new SimMutex(); }
+inline SemaphoreHandle_t
+xSemaphoreCreateMutexStatic(StaticSemaphore_t *storage) {
+  return storage;
+}
+
 // SimMutex is already recursive, so the recursive API is the same calls.
 inline SemaphoreHandle_t xSemaphoreCreateRecursiveMutexStatic(StaticSemaphore_t *b) { return xSemaphoreCreateMutexStatic(b); }
 

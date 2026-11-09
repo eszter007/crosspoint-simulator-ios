@@ -1,0 +1,114 @@
+{
+  "date": "2026-10-19",
+  "host": "Intel macOS; SDL dummy video driver",
+  "firmware": "261726f617c3fcd78cb75949ee3b68ece6c23c03",
+  "sdk": "25cd36c7c28192991f11ba99c1f520d19ff12fa5",
+  "simulator_base": "82bf1d85d05cb5db94d9a9ac86751349a3c9d457",
+  "fixture_sha256": "9cfb793219cb30489e65e5568a469b0f2958be70ce44ed175fdcc220121ba604",
+  "builds": {
+    "simulator_picco": "passed",
+    "simulator": "passed"
+  },
+  "profile_contracts": 9,
+  "rejected_selections": 28,
+  "native_checks": [
+    "Picco normal and NDEBUG",
+    "normal sleep and held-button immediate wake",
+    "static mutex caller storage and cross-thread exclusion",
+    "EEGO frontlit and lightless",
+    "Metalio"
+  ],
+  "application_orientations": [
+    {
+      "orientation": 0,
+      "width": 480,
+      "height": 800,
+      "rendered_pages": 2,
+      "home_entered": true,
+      "exit": 0,
+      "normalized_gesture": true
+    },
+    {
+      "orientation": 1,
+      "width": 800,
+      "height": 480,
+      "rendered_pages": 2,
+      "home_entered": true,
+      "exit": 0,
+      "normalized_gesture": true
+    },
+    {
+      "orientation": 2,
+      "width": 480,
+      "height": 800,
+      "rendered_pages": 2,
+      "home_entered": true,
+      "exit": 0,
+      "normalized_gesture": true
+    },
+    {
+      "orientation": 3,
+      "width": 800,
+      "height": 480,
+      "rendered_pages": 2,
+      "home_entered": true,
+      "exit": 0,
+      "normalized_gesture": true
+    }
+  ],
+  "application_switch_bindings": [
+    {
+      "action": 0,
+      "field": "frontlightOn",
+      "switch": "on",
+      "value": 1,
+      "exit": 0
+    },
+    {
+      "action": 0,
+      "field": "frontlightOn",
+      "switch": "off",
+      "value": 0,
+      "exit": 0
+    },
+    {
+      "action": 1,
+      "field": "screenInverted",
+      "switch": "on",
+      "value": 1,
+      "exit": 0
+    },
+    {
+      "action": 1,
+      "field": "screenInverted",
+      "switch": "off",
+      "value": 0,
+      "exit": 0
+    },
+    {
+      "action": 2,
+      "field": "touchReaderControls",
+      "switch": "on",
+      "value": 1,
+      "exit": 0
+    },
+    {
+      "action": 2,
+      "field": "touchReaderControls",
+      "switch": "off",
+      "value": 0,
+      "exit": 0
+    }
+  ],
+  "application_sleep_wake": {
+    "boots": 2,
+    "switch_changed_while_asleep": true,
+    "restored_frontlightOn": 0
+  },
+  "screenshots_sha256": {
+    "picco-reader-landscape.png": "9a964b183fc8b79709bc89d8cc67db2d5b5a2f20fc6bdbad5d21931b33d4c7d5",
+    "picco-home.png": "af7f38366a563ef86206770f5594e0cc4cd8becf8c0424311d6272a5ab9233fc",
+    "picco-reader.png": "8481c257b2b3edee9a2168f5abb3cfc277569f9762318acca9213ae807153f7d"
+  },
+  "physical_hardware_validated": false
+}

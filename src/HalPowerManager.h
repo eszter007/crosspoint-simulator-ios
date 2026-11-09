@@ -47,6 +47,12 @@ public:
   // Should be called inside main loop() to handle the currentLockMode
   void startDeepSleep(HalGPIO &gpio, bool wakeOnHeldButton = false) const;
 
+#if FREEINK_DEVICE_PICCO
+  bool holdWhileUsbPowered(HalGPIO &gpio,
+                           void (*onStatus)(bool charging,
+                                            uint16_t percent)) const;
+#endif
+
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
 

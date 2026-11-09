@@ -391,6 +391,21 @@ these flags:
   SSD1677 profile. It exposes FT6336-compatible touch and swipe input, the RTC,
   and single-channel frontlight state without a Home key or color-temperature
   control.
+- `-DSIMULATOR_DEVICE_METALIO_EINK4` selects the Metalio E-Ink 4's 800x480
+  SSD1677 profile with CST816S-compatible touch, cover Home-key input, RTC,
+  tilt availability, and haptic settings. It has no frontlight. Return maps to
+  BOOT/confirm, P to power, and Up/Down to volume; Page Up/Page Down model
+  cover Prev/Next. Escape and Left/Right are disabled because this board has no corresponding buttons.
+  See [the profile contract and verification](docs/metalio-eink4.md).
+- `-DSIMULATOR_DEVICE_EEGO_A4` selects the EEGO A4's 768x552 UC8279C
+  profile, GSLX680-compatible touch, RTC and optional warm/cool I2C frontlight.
+  Up/Down and P are its only physical buttons; H models the touch controller's
+  screen-key events. Add `-DSIMULATOR_EEGO_NO_FRONTLIGHT` for a lightless unit.
+  See [the profile contract and verification](docs/eego-a4.md).
+- `-DSIMULATOR_DEVICE_PICCO` selects the BOOX Picco's 800x480 profile with
+  touch, RTC, tilt availability and warm/cool I2C frontlight state. T models the
+  slide switch; Up/Down/P and the SDK's provisional Confirm input are available.
+  There is no Home key. See [the profile contract and limits](docs/picco.md).
 - `-DSIMULATOR_DISPLAY_UC8179` selects the newer UC8179 controller used by
   some X4 and X4 Pro production batches.
 - `-DSIMULATOR_DISPLAY_UC8279` selects UC8279d on X3, or the 800x480 UC8279
@@ -400,8 +415,9 @@ The sample PlatformIO files include ready-to-use environments for the original
 profiles plus `simulator_sticky`, `simulator_x3_uc8279`, `simulator_x4_uc8179`,
 `simulator_x4_uc8279`, `simulator_x4_pro_uc8179`, and
 `simulator_x4_pro_uc8279`, the three `simulator_x4_classic` controller
-variants, plus `simulator_papermono`. The UC8279 X4 Pro path mirrors current
-FreeInk SDK support but remains pending validation on physical UC8279 X4 Pro
+variants, plus `simulator_papermono`, `simulator_metalio_eink4`,
+`simulator_eego_a4`, `simulator_eego_a4_no_frontlight` and `simulator_picco`. The UC8279
+X4 Pro path mirrors current FreeInk SDK support but remains pending validation on physical UC8279 X4 Pro
 hardware.
 
 Controller profiles expose the same framebuffer geometry and device
@@ -419,7 +435,7 @@ display.setSimulatorOrientation(static_cast<int>(o));
 ```
 
 Put that in the renderer's orientation setter after updating the renderer's own orientation state.
-By default, the simulator keeps its own `JPEGDEC`, `PNGdec`, and QRCode compatibility shims so existing firmware projects can update this library without changing their simulator environment. To test against the native decoder libraries instead, follow the opt-in comments in the sample PlatformIO files: define `CROSSPOINT_SIM_USE_NATIVE_DECODERS`, set `lib_compat_mode = off`, change simulator `lib_ignore` to `hal, WebSockets`, and add the native `PNGdec`/`JPEGDEC` dependencies. `WebSockets` is ignored only in native simulator builds because this repo supplies the host-backed `WebSocketsServer` implementation.
+By default, the simulator keeps its own `JPEGDEC`, `PNGdec`, and QRCode compatibility shims so existing firmware projects can update this library without changing their simulator environment. To test against the native decoder libraries instead, follow the opt-in comments in the sample PlatformIO files: define `CROSSPOINT_SIM_USE_NATIVE_DECODERS`, set `lib_compat_mode = off`, change simulator `lib_ignore` to `hal, WebSockets, SecureNet`, and add the native `PNGdec`/`JPEGDEC` dependencies. `WebSockets` is ignored only in native simulator builds because this repo supplies the host-backed `WebSocketsServer` implementation.
 
 If you only want a self-contained simulator dependency, stop there.
 
@@ -465,6 +481,7 @@ The `post:` line above only exposes the task in the consuming project UI. The ac
 ### Setup
 
 Place EPUB books at `./fs_/books/` in the Crosspoint repo's root. This maps to the `/books/` path on the physical SD card.
+Values the firmware keeps in NVS flash, such as the secret behind plugin device IDs, are stored in `./fs_/.simulator-nvs/`. Delete that folder to simulate a new device.
 
 ### Build and run
 
@@ -484,7 +501,8 @@ pio run -e simulator -t run_simulator
 | Escape | Back                               |
 | P      | Power                              |
 | S      | Simulate sleep                     |
-| H      | X4 Pro capacitive Home key         |
+| H      | X4 Pro / Metalio cover Home key    |
+| T      | Picco slide switch on/off         |
 | Mouse  | Touch-device tap and swipe         |
 
 When the simulator is on the sleep screen, pressing any mapped simulator key wakes it. Under the hood the simulator relaunches itself and reports a synthetic power-button wake, because the native build has no real ESP deep-sleep resume path.
@@ -498,15 +516,45 @@ tests possible without desktop-control permissions:
   `<milliseconds>:<action>`, separated by semicolons. Button actions use
   `<key>[:<hold-milliseconds>]`; keys are `BACK`, `ENTER`, `LEFT`, `RIGHT`,
   `UP`, `DOWN`, `POWER`, `SLEEP`, `HOME`, and `QUIT`. A normal key press is
-  held for 80 ms unless a duration is provided.
+  held for 80 ms unless a duration is provided. Metalio also accepts `PREV`
+  and `NEXT` for its capacitive cover page keys; `UP`/`DOWN` remain physical
+  volume keys. A key pressed at 0 ms is already held when the firmware
+  starts, like a button held at power-on.
+- `WAIT:<regex>` pauses the script until a firmware log line matches the
+  pattern (ECMAScript syntax, `;` not allowed). Lines logged since the last
+  scripted input count, so a WAIT placed after a key press also sees what that
+  press logged right away. Times after a WAIT count from the moment it
+  matched. If nothing matches within 30 s (`CROSSPOINT_SIM_WAIT_TIMEOUT_MS`),
+  the simulator exits with status 1; a pattern that does not compile exits
+  with status 2.
+- `SHOT:<path>` saves a BMP screenshot of the current screen. Unlike
+  `CROSSPOINT_SIM_SCREENSHOTS`, it follows the script, so it stays in step
+  with WAIT.
+- Picco accepts `SWITCH_ON` and `SWITCH_OFF` to set the slide-switch position.
+  `CROSSPOINT_SIM_SLIDE_SWITCH=on` selects its initial position (default off).
 - Touch-device actions use `TAP:<x>,<y>[,<hold-milliseconds>]` or
   `SWIPE:<x1>,<y1>,<x2>,<y2>[,<duration-milliseconds>]`. Coordinates are in
   displayed logical pixels, so they match UI layouts and screenshots after the
   firmware changes orientation. Normalized coordinates from 0.0 to 1.0 are
   also accepted for existing scripts.
+- `CROSSPOINT_SIM_SD` sets the folder used as the SD card (default `./fs_`).
+  The firmware reopens the last book at boot, so start each scripted run with
+  a fresh folder (or a known `.crosspoint/state.json`) when the script
+  expects Home.
 - `CROSSPOINT_SIM_SCREENSHOTS` saves BMP screenshots as
   `<milliseconds>:<path>`, separated by semicolons. Create the destination
   directory before running the simulator.
+- `CROSSPOINT_SIM_SCREEN_TEXT=1` prints the text on screen after each display
+  refresh, in reading order, as one serial line:
+  `[SIM] SCREEN: 100% | SD card | books | / | « Home | Open | Up | Down`.
+  Each string the firmware drew since the last full clear is one entry, so
+  a book page lists one entry per word. A refresh that shows the same text
+  again prints nothing. The line goes through the serial port like a firmware
+  log line, so a test can check a screen from the log instead of reading a
+  screenshot. The simulator build compiles a copy of the firmware's
+  `GfxRenderer.cpp` whose `drawText()` reports its strings. If that function
+  changes too much to patch, the build prints
+  `Simulator: GfxRenderer::drawText changed` and the feature is off.
 - `CROSSPOINT_SIM_FREE_HEAP` and `CROSSPOINT_SIM_MAX_ALLOC_HEAP` override the
   ESP heap metrics reported to firmware. They are useful for repeatable
   low-memory paths without exhausting the host process. Values are byte counts;
@@ -519,12 +567,22 @@ tests possible without desktop-control permissions:
   pre-sleep schedules are cleared during relaunch so they cannot repeat
   forever.
 
-Times are measured from process startup. For example:
+Times are measured from process startup, or from the last matched WAIT. For
+example:
 
 ```bash
 mkdir -p ./qa-artifacts
 CROSSPOINT_SIM_INPUT_SCRIPT='900:DOWN;1250:DOWN;1600:DOWN;1900:ENTER;3000:QUIT' \
 CROSSPOINT_SIM_SCREENSHOTS='2400:./qa-artifacts/settings.bmp' \
+  .pio/build/simulator/program
+```
+
+With WAIT, a script follows the firmware instead of guessing how long each
+screen takes. Each time counts from the previous WAIT, so the second WAIT
+comes after the ENTER that causes it:
+
+```bash
+CROSSPOINT_SIM_INPUT_SCRIPT='0:WAIT:Entering activity: Home;300:SHOT:./qa-artifacts/home.bmp;500:ENTER;500:WAIT:Entering activity: FileBrowser;300:SHOT:./qa-artifacts/files.bmp;400:QUIT' \
   .pio/build/simulator/program
 ```
 
@@ -557,7 +615,42 @@ The screenshot contains the SDL renderer output at the host's actual drawable
 resolution, including Retina/HiDPI scaling. BMP is used because it is supported
 directly by SDL2 and adds no image-encoding dependency to the simulator.
 
-### Notes
+## Running an SD plugin
+
+`tools/run_plugin.py` starts the simulator with one plugin installed on a
+fresh SD card, with plugins enabled and the Plugin Hub prompt hidden. Run it
+from the firmware project after `pio run -e simulator`:
+
+```bash
+python3 ../crosspoint-simulator/tools/run_plugin.py ../my-plugin/my.crosspoint-plugin \
+  --config my-config.json --open
+```
+
+- `--config` installs a JSON file as the plugin's config file (the name in
+  `device.json` `config.file`, default `config.json`).
+- `--open` goes to Home > Plugins > the plugin and connects to the first
+  simulated Wi-Fi network, so the window opens on the plugin's first screen.
+- `--script` adds input steps. With `--open`, their times count from the
+  plugin opening.
+- `--routes`, `--http-log`, and `--port` set `CROSSPOINT_SIM_HTTP_ROUTES`,
+  `CROSSPOINT_SIM_HTTP_LOG`, and `CROSSPOINT_SIM_HTTP_PORT`.
+- Screen text is on; `--no-screen-text` turns it off. `--headless` runs
+  without a window.
+- The SD card is a temporary folder deleted on exit, so a token in the config
+  does not stay on disk. `--sd <folder>` keeps the card between runs; the
+  plugin folder is copied over it each time, and files the plugin wrote stay.
+
+The exit status is the simulator's, so a script that ends in `QUIT` works as a
+test: a WAIT that times out exits with 1. For example, this checks that a
+plugin lists the folders the API returns, without the network:
+
+```bash
+python3 ../crosspoint-simulator/tools/run_plugin.py ../my-plugin/my.crosspoint-plugin \
+  --config test-config.json --routes test-routes.json --open --headless \
+  --script '0:WAIT:SCREEN:.*Tech;300:SHOT:folders.bmp;500:QUIT'
+```
+
+## Notes
 
 **Host-backed network flows**: OPDS/catalog downloads and KOReader sync use the
 host's `curl` binary through simulator implementations of `HTTPClient` and
@@ -584,6 +677,41 @@ CROSSPOINT_SIM_HTTP_MOCK_ROOT="$PWD/lib/EpdFont/scripts/output" \
 The mock still uses the firmware's normal manifest parsing, file download,
 write-to-SD, `.cpfont` validation, registry refresh, and font-selection flow.
 
+**HTTP routes**: Set `CROSSPOINT_SIM_HTTP_ROUTES` to a JSON file of canned
+answers matched on method, full URL, and request headers. This tests a
+plugin or catalog against an API without the service or a real account,
+including error answers such as 401 or 500. Routes are checked before
+`CROSSPOINT_SIM_HTTP_MOCK_ROOT`, in file order, and the first match answers:
+
+```json
+{
+  "unmatched": "fail",
+  "routes": [
+    {
+      "method": "GET",
+      "url": "https://api.example.com/folders",
+      "request_headers": { "Authorization": "Bearer test-*" },
+      "headers": { "Content-Type": "application/json" },
+      "body": { "folders": [{ "id": 7, "title": "Tech" }] }
+    },
+    { "url": "https://api.example.com/folders", "status": 401, "body": "{}" },
+    { "url": "https://api.example.com/bookmarks?folder=7&*", "body_file": "bookmarks-7.json" }
+  ]
+}
+```
+
+- `url` and the `request_headers` values match the whole text, where `*`
+  matches anything. Header names ignore case. `method` defaults to any.
+- `status` defaults to 200. `body` is sent as is when it is a string and as
+  JSON otherwise; `body_file` is read relative to the routes file.
+- With `"unmatched": "fail"`, a request no route answers fails as if the
+  server refused the connection, and the simulator prints its method and URL
+  without the query. The default, `"network"`, sends it on as usual.
+- The file is read again for each request, so a test can change the answers
+  while the simulator runs. A file that cannot be read or parsed fails every
+  request.
+- The top level can also be just the array of routes.
+
 **File transfer**: The simulator provides host-backed `WebServer`,
 `WebSocketsServer`, and `NetworkClient` shims so firmware-owned file-transfer
 routes can run on the host. Firmware web servers that bind port 80 are exposed
@@ -606,6 +734,32 @@ custom_simulator_http_port = 18080
 ```
 
 Direct binary launches use the environment variable form.
+
+To open the web manager, select **File Transfer → Create Hotspot** in the
+simulator, then open `http://127.0.0.1:8080/` in your host browser. The simulated
+hotspot uses the host's loopback interface; no Wi-Fi connection is required.
+Keep the File Transfer screen open while using the browser.
+
+If `/settings` returns 404 or you see a reduced simulator file-transfer page,
+your environment still selects the legacy substitute. Update it to match the
+current sample: remove the `network/CrossPointWebServer.cpp` and
+`network/WebDAVHandler.cpp` exclusions from `build_src_filter`, add
+`-DCROSSPOINT_SIMULATOR_PROJECT_WEBSERVER` to `build_flags`, and rebuild.
+This compiles the firmware's actual web manager against the host network shims.
+
+From the firmware project, run the isolated HTTP smoke check after building:
+
+```bash
+python3 .pio/libdeps/simulator/simulator/test/web_manager_smoke.py \
+  .pio/build/simulator/program
+```
+
+The check navigates an empty simulated SD card to Create Hotspot and verifies
+the web pages, settings API, WebDAV, and WebSocket handshake. It uses a temporary
+directory and leaves your project's `fs_` untouched.
+
+The crypto endpoint supports host SHA-1/SHA-256 hashes and random bytes.
+Protected-book AES, RSA, and PKCS#12 operations return errors in the simulator.
 
 **Firmware updates**: OTA and SD-card firmware flashing are non-destructive in
 the simulator. The simulator stubs those update paths so the UI can be opened

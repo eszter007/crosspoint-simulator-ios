@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <cstring>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -23,12 +25,15 @@
 extern HalDisplay display; // defined in the firmware's main.cpp
 
 static std::atomic<bool> backgrounded{false};
+#include "SimLog.h"
 #include "SimulatorLifecycle.h"
 
 // Defined in HalDisplay.cpp — set here so all SDL event polling lives in one
 // place.
 extern std::atomic<bool> quitRequested;
 extern GfxRenderer renderer;
+// Defined in HalDisplay.cpp: saves the next presented frame to `path`.
+void scheduleSimulatorScreenshot(const std::string &path);
 
 // Keyboard mapping:
 //   BTN_BACK    (0) → Escape
@@ -43,6 +48,7 @@ extern GfxRenderer renderer;
 static constexpr int NUM_BUTTONS = 7;
 static constexpr SDL_Scancode SIMULATOR_SLEEP_SCANCODE = SDL_SCANCODE_S;
 static constexpr SDL_Scancode HOME_KEY_SCANCODE = SDL_SCANCODE_H;
+static constexpr SDL_Scancode SLIDE_SWITCH_SCANCODE = SDL_SCANCODE_T;
 static constexpr int TOUCH_TAP_SLOP_PX = 28;
 static constexpr int TOUCH_SWIPE_MIN_PX = 60;
 // The SDK keeps two slops, and they do different jobs: TOUCH_TAP_SLOP_PX ends a
@@ -71,6 +77,8 @@ static bool releasedThisFrame[NUM_BUTTONS] = {};
 static unsigned long buttonPressTime[NUM_BUTTONS] = {};
 static bool syntheticButtonDown[NUM_BUTTONS] = {};
 static bool simulatorSleepRequested = false;
+static bool coverButtonDown[NUM_BUTTONS] = {};
+static bool capacitivePagePressedThisFrame = false;
 
 namespace {
 
@@ -114,6 +122,13 @@ bool homeKeyTappedThisFrame = false;
 bool homeKeyLongPressedThisFrame = false;
 bool homeKeyLongFired = false;
 unsigned long homeKeyPressedAt = 0;
+bool toggleSwitchOn = false;
+
+void setToggleSwitch(bool on) {
+  if (BoardConfig::ACTIVE.input.toggleSwitch < 0)
+    return;
+  toggleSwitchOn = on;
+}
 
 enum LiveInputAction : Sint32 {
   LiveButtonDown = 1,
@@ -125,13 +140,19 @@ enum LiveInputAction : Sint32 {
 enum class SyntheticAction {
   KeyDown,
   KeyUp,
+  CoverDown,
+  CoverUp,
   TouchDown,
   TouchMove,
   TouchUp,
   HomeDown,
   HomeUp,
+  SwitchOn,
+  SwitchOff,
   Sleep,
-  Quit
+  Quit,
+  Wait,
+  Screenshot
 };
 
 struct SyntheticEvent {
@@ -141,10 +162,20 @@ struct SyntheticEvent {
   float logicalNx = 0.0f;
   float logicalNy = 0.0f;
   bool handled = false;
+  // Each WAIT starts a new segment; atMs counts from the segment start.
+  size_t segment = 0;
+  std::string text; // WAIT pattern or SHOT path
+  std::regex pattern;
+  unsigned long waitingSinceMs = 0;
 };
 
 std::vector<SyntheticEvent> syntheticEvents;
 bool syntheticEventsInitialized = false;
+// millis() when each script segment started; segment 0 starts at boot.
+std::vector<long> segmentStartMs;
+// Start of the last scripted input, so WAIT also sees lines it caused.
+unsigned long lastInputMs = 0;
+unsigned long waitTimeoutMs = 30000;
 
 float clamp01(float value) { return std::max(0.0f, std::min(1.0f, value)); }
 
@@ -365,6 +396,41 @@ void requestSimulatorSleep() {
   buttonPressTime[HalGPIO::BTN_POWER] = SDL_GetTicks();
 }
 
+bool buttonAvailable(int button) {
+  if (BoardConfig::isPicco())
+    return button == HalGPIO::BTN_CONFIRM || button == HalGPIO::BTN_POWER ||
+           button == HalGPIO::BTN_UP || button == HalGPIO::BTN_DOWN;
+  if (BoardConfig::isEegoA4())
+    return button == HalGPIO::BTN_POWER || button == HalGPIO::BTN_UP ||
+           button == HalGPIO::BTN_DOWN;
+  if (!BoardConfig::isMetalioEInk4())
+    return true;
+  // BOOT/POWER and the expander/cover page keys are the only button inputs.
+  return button == HalGPIO::BTN_CONFIRM || button == HalGPIO::BTN_POWER ||
+         button == HalGPIO::BTN_UP || button == HalGPIO::BTN_DOWN;
+}
+
+void beginCoverButton(int button) {
+  if (!BoardConfig::isMetalioEInk4() || coverButtonDown[button])
+    return;
+  coverButtonDown[button] = true;
+  capacitivePagePressedThisFrame = true;
+  if (!syntheticButtonDown[button] &&
+      !SDL_GetKeyboardState(nullptr)[buttonScancode[button]]) {
+    pressedThisFrame[button] = true;
+    buttonPressTime[button] = SDL_GetTicks();
+  }
+}
+
+void endCoverButton(int button) {
+  if (!coverButtonDown[button])
+    return;
+  coverButtonDown[button] = false;
+  if (!syntheticButtonDown[button] &&
+      !SDL_GetKeyboardState(nullptr)[buttonScancode[button]])
+    releasedThisFrame[button] = true;
+}
+
 std::string uppercase(std::string value) {
   std::transform(
       value.begin(), value.end(), value.begin(),
@@ -399,12 +465,17 @@ void initializeSyntheticEvents() {
   if (!script || script[0] == '\0')
     return;
 
+  if (const char *timeout = std::getenv("CROSSPOINT_SIM_WAIT_TIMEOUT_MS"))
+    waitTimeoutMs = std::strtoul(timeout, nullptr, 10);
+
   const std::string spec(script);
+  size_t segment = 0;
   size_t start = 0;
   while (start < spec.size()) {
     const size_t end = spec.find(';', start);
     const std::string item = spec.substr(
         start, end == std::string::npos ? std::string::npos : end - start);
+    const size_t firstEvent = syntheticEvents.size();
     const size_t firstColon = item.find(':');
     const size_t secondColon = firstColon == std::string::npos
                                    ? std::string::npos
@@ -416,10 +487,40 @@ void initializeSyntheticEvents() {
           item.substr(firstColon + 1, secondColon == std::string::npos
                                           ? std::string::npos
                                           : secondColon - firstColon - 1));
-      if (key == "QUIT") {
+      if (key == "SWITCH_ON" || key == "SWITCH_OFF") {
+        syntheticEvents.push_back({atMs, key == "SWITCH_ON"
+                                             ? SyntheticAction::SwitchOn
+                                             : SyntheticAction::SwitchOff});
+      } else if (key == "QUIT") {
         syntheticEvents.push_back({atMs, SyntheticAction::Quit});
+      } else if ((key == "WAIT" || key == "SHOT") &&
+                 secondColon != std::string::npos) {
+        SyntheticEvent event{atMs, key == "WAIT" ? SyntheticAction::Wait
+                                                 : SyntheticAction::Screenshot};
+        event.text = item.substr(secondColon + 1);
+        if (key == "WAIT") {
+          try {
+            event.pattern = std::regex(event.text);
+          } catch (const std::regex_error &e) {
+            std::fprintf(stderr, "[SIM] Bad WAIT pattern \"%s\": %s\n",
+                         event.text.c_str(), e.what());
+            SimulatorLifecycle::setExitCode(2);
+            quitRequested.store(true);
+          }
+        }
+        syntheticEvents.push_back(std::move(event));
       } else if (key == "S" || key == "SLEEP") {
         syntheticEvents.push_back({atMs, SyntheticAction::Sleep});
+      } else if (key == "PREV" || key == "NEXT") {
+        const int button = key == "PREV" ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN;
+        const unsigned long holdMs =
+            secondColon == std::string::npos
+                ? 80
+                : std::strtoul(item.substr(secondColon + 1).c_str(), nullptr,
+                               10);
+        syntheticEvents.push_back({atMs, SyntheticAction::CoverDown, button});
+        syntheticEvents.push_back(
+            {atMs + holdMs, SyntheticAction::CoverUp, button});
       } else if (key == "HOME") {
         const unsigned long holdMs =
             secondColon == std::string::npos
@@ -470,15 +571,44 @@ void initializeSyntheticEvents() {
       }
     }
 
+    for (size_t i = firstEvent; i < syntheticEvents.size(); ++i) {
+      syntheticEvents[i].segment = segment;
+      if (syntheticEvents[i].action == SyntheticAction::Wait)
+        ++segment;
+    }
+
     if (end == std::string::npos)
       break;
     start = end + 1;
   }
 
-  std::sort(syntheticEvents.begin(), syntheticEvents.end(),
-            [](const SyntheticEvent &a, const SyntheticEvent &b) {
-              return a.atMs < b.atMs;
-            });
+  segmentStartMs.assign(segment + 1, -1);
+  segmentStartMs[0] = 0;
+  std::stable_sort(syntheticEvents.begin(), syntheticEvents.end(),
+                   [](const SyntheticEvent &a, const SyntheticEvent &b) {
+                     return a.segment != b.segment ? a.segment < b.segment
+                                                   : a.atMs < b.atMs;
+                   });
+}
+
+// True once a WAIT's pattern is seen; times out the run after waitTimeoutMs.
+bool waitFinished(SyntheticEvent &event, unsigned long now) {
+  std::string line;
+  if (sim_log::findSince(lastInputMs, event.pattern, &line)) {
+    std::fprintf(stderr, "[SIM] WAIT matched: %s\n", line.c_str());
+    segmentStartMs[event.segment + 1] = static_cast<long>(now);
+    return true;
+  }
+  if (event.waitingSinceMs == 0) {
+    event.waitingSinceMs = now;
+  } else if (now - event.waitingSinceMs > waitTimeoutMs) {
+    std::fprintf(stderr, "[SIM] WAIT timed out after %lu ms: %s\n",
+                 waitTimeoutMs, event.text.c_str());
+    SimulatorLifecycle::setExitCode(1);
+    quitRequested.store(true);
+    return true;
+  }
+  return false;
 }
 
 // --- live injection (on-screen key strip) ------------------------------------
@@ -535,21 +665,53 @@ void processSyntheticEvents() {
   initializeSyntheticEvents();
   const unsigned long now = millis();
   for (auto &event : syntheticEvents) {
-    if (event.handled || event.atMs > now)
+    const long segmentStart = segmentStartMs[event.segment];
+    if (event.handled || segmentStart < 0 ||
+        static_cast<unsigned long>(segmentStart) + event.atMs > now)
       continue;
+    if (event.action == SyntheticAction::Wait) {
+      event.handled = waitFinished(event, now);
+      continue;
+    }
     event.handled = true;
     switch (event.action) {
     case SyntheticAction::KeyDown:
-      pressedThisFrame[event.button] = true;
-      syntheticButtonDown[event.button] = true;
+    case SyntheticAction::CoverDown:
+    case SyntheticAction::TouchDown:
+    case SyntheticAction::HomeDown:
+    case SyntheticAction::SwitchOn:
+    case SyntheticAction::SwitchOff:
+    case SyntheticAction::Sleep:
+      lastInputMs = now;
+      break;
+    default:
+      break;
+    }
+    switch (event.action) {
+    case SyntheticAction::KeyDown:
+      if (!buttonAvailable(event.button))
+        break;
       // Held-time calculations use SDL_GetTicks() for real keyboard events;
       // synthetic presses must use the same clock origin to avoid unsigned
       // underflow being mistaken for an immediate long press.
-      buttonPressTime[event.button] = SDL_GetTicks();
+      if (!coverButtonDown[event.button]) {
+        pressedThisFrame[event.button] = true;
+        buttonPressTime[event.button] = SDL_GetTicks();
+      }
+      syntheticButtonDown[event.button] = true;
       break;
     case SyntheticAction::KeyUp:
-      releasedThisFrame[event.button] = true;
+      if (!buttonAvailable(event.button))
+        break;
+      if (!coverButtonDown[event.button])
+        releasedThisFrame[event.button] = true;
       syntheticButtonDown[event.button] = false;
+      break;
+    case SyntheticAction::CoverDown:
+      beginCoverButton(event.button);
+      break;
+    case SyntheticAction::CoverUp:
+      endCoverButton(event.button);
       break;
     case SyntheticAction::TouchDown:
       beginTouch(event.logicalNx, event.logicalNy, SDL_GetTicks());
@@ -566,11 +728,22 @@ void processSyntheticEvents() {
     case SyntheticAction::HomeUp:
       endHomeKey();
       break;
+    case SyntheticAction::SwitchOn:
+      setToggleSwitch(true);
+      break;
+    case SyntheticAction::SwitchOff:
+      setToggleSwitch(false);
+      break;
     case SyntheticAction::Sleep:
       requestSimulatorSleep();
       break;
     case SyntheticAction::Quit:
       quitRequested.store(true);
+      break;
+    case SyntheticAction::Screenshot:
+      scheduleSimulatorScreenshot(event.text);
+      break;
+    case SyntheticAction::Wait:
       break;
     }
   }
@@ -629,6 +802,7 @@ static void clearButtonState() {
     releasedThisFrame[i] = false;
     buttonPressTime[i] = 0;
     syntheticButtonDown[i] = false;
+    coverButtonDown[i] = false;
   }
   touchState = {};
   liveTouchEvents.clear();
@@ -651,7 +825,16 @@ static int scancodeToButton(SDL_Scancode sc) {
 }
 
 void HalGPIO::begin() {
-#if defined(SIMULATOR_DEVICE_PAPERMONO)
+#if defined(SIMULATOR_DEVICE_PICCO)
+  _deviceType = DeviceType::X4;
+  BoardConfig::selectDevice(BoardConfig::Board::Picco);
+#elif defined(SIMULATOR_DEVICE_EEGO_A4)
+  _deviceType = DeviceType::X4;
+  BoardConfig::selectDevice(BoardConfig::Board::EegoA4);
+#elif defined(SIMULATOR_DEVICE_METALIO_EINK4)
+  _deviceType = DeviceType::X4;
+  BoardConfig::selectDevice(BoardConfig::Board::MetalioEInk4);
+#elif defined(SIMULATOR_DEVICE_PAPERMONO)
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::PaperMono);
 #elif defined(SIMULATOR_DEVICE_STICKY)
@@ -676,6 +859,12 @@ void HalGPIO::begin() {
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX4);
 #endif
+  const char *position = std::getenv("CROSSPOINT_SIM_SLIDE_SWITCH");
+  toggleSwitchOn = false;
+  setToggleSwitch(position && std::strcmp(position, "on") == 0);
+  // A key a script presses at 0 ms is held at power-on, so setup() sees it
+  // the way the device sees a held button (Back skips reopening the book).
+  processSyntheticEvents();
 }
 
 bool HalGPIO::isXteinkDevice() const {
@@ -700,6 +889,7 @@ void HalGPIO::beginFrame() {
     pressedThisFrame[i] = false;
     releasedThisFrame[i] = false;
   }
+  capacitivePagePressedThisFrame = false;
   touchState.pressedThisFrame = false;
   touchState.releasedThisFrame = false;
   touchState.activityThisFrame = false;
@@ -768,6 +958,16 @@ void HalGPIO::update() {
     } else if (e.type == SDL_APP_DIDENTERFOREGROUND) {
       backgrounded.store(false);
     } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
+      if (e.key.keysym.scancode == SLIDE_SWITCH_SCANCODE) {
+        setToggleSwitch(!toggleSwitchOn);
+        continue;
+      }
+      if (e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ||
+          e.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
+        beginCoverButton(
+            e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ? BTN_UP : BTN_DOWN);
+        continue;
+      }
       if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
         beginHomeKey();
         continue;
@@ -777,18 +977,27 @@ void HalGPIO::update() {
         continue;
       }
       int btn = scancodeToButton(e.key.keysym.scancode);
-      if (btn >= 0) {
-        pressedThisFrame[btn] = true;
-        buttonPressTime[btn] = SDL_GetTicks();
+      if (btn >= 0 && buttonAvailable(btn)) {
+        if (!coverButtonDown[btn]) {
+          pressedThisFrame[btn] = true;
+          buttonPressTime[btn] = SDL_GetTicks();
+        }
       }
     } else if (e.type == SDL_KEYUP) {
+      if (e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ||
+          e.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
+        endCoverButton(e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ? BTN_UP
+                                                                    : BTN_DOWN);
+        continue;
+      }
       if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
         endHomeKey();
         continue;
       }
       int btn = scancodeToButton(e.key.keysym.scancode);
-      if (btn >= 0) {
-        releasedThisFrame[btn] = true;
+      if (btn >= 0 && buttonAvailable(btn)) {
+        if (!coverButtonDown[btn])
+          releasedThisFrame[btn] = true;
       }
     } else if (e.type == SDL_FINGERDOWN && !activeFinger) {
       float logicalNx = 0.0f;
@@ -887,20 +1096,28 @@ bool HalGPIO::anyButtonDownRaw() {
 }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const {
-  if (buttonIndex >= NUM_BUTTONS)
+  if (buttonIndex >= NUM_BUTTONS || !buttonAvailable(buttonIndex))
     return false;
   const uint8_t *state = SDL_GetKeyboardState(NULL);
-  return state[buttonScancode[buttonIndex]] || syntheticButtonDown[buttonIndex];
+  return state[buttonScancode[buttonIndex]] ||
+         syntheticButtonDown[buttonIndex] || coverButtonDown[buttonIndex];
+}
+
+bool HalGPIO::rawInputActive() {
+  for (uint8_t button = 0; button < NUM_BUTTONS; ++button) {
+    if (isPressed(button)) return true;
+  }
+  return touchState.down || homeKeyDown;
 }
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
-  if (buttonIndex >= NUM_BUTTONS)
+  if (buttonIndex >= NUM_BUTTONS || !buttonAvailable(buttonIndex))
     return false;
   return pressedThisFrame[buttonIndex];
 }
 
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
-  if (buttonIndex >= NUM_BUTTONS)
+  if (buttonIndex >= NUM_BUTTONS || !buttonAvailable(buttonIndex))
     return false;
   return releasedThisFrame[buttonIndex];
 }
@@ -927,7 +1144,9 @@ unsigned long HalGPIO::getHeldTime() const {
   unsigned long maxHeld = 0;
   const uint8_t *state = SDL_GetKeyboardState(NULL);
   for (int i = 0; i < NUM_BUTTONS; i++) {
-    if ((state[buttonScancode[i]] || syntheticButtonDown[i]) &&
+    if (buttonAvailable(i) &&
+        (state[buttonScancode[i]] || syntheticButtonDown[i] ||
+         coverButtonDown[i]) &&
         buttonPressTime[i] > 0) {
       unsigned long held = now - buttonPressTime[i];
       if (held > maxHeld)
@@ -945,9 +1164,25 @@ unsigned long HalGPIO::getPowerButtonHeldTime() const {
   return SDL_GetTicks() - buttonPressTime[BTN_POWER];
 }
 
+bool HalGPIO::wasCapacitivePagePressed() const {
+  return capacitivePagePressedThisFrame;
+}
+
+bool HalGPIO::isCapacitivePagePressed(uint8_t buttonIndex) const {
+  return buttonIndex < NUM_BUTTONS && coverButtonDown[buttonIndex];
+}
+
 bool HalGPIO::hasTouch() const { return BoardConfig::hasTouch(); }
 
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
+
+bool HalGPIO::hasToggleSwitch() const {
+  return BoardConfig::ACTIVE.input.toggleSwitch >= 0;
+}
+
+bool HalGPIO::isToggleSwitchOn() const {
+  return hasToggleSwitch() && toggleSwitchOn;
+}
 
 bool HalGPIO::wasHomeKeyPressed() const { return homeKeyPressedThisFrame; }
 
@@ -975,6 +1210,14 @@ bool HalGPIO::wasTouchDown(float &nx, float &ny) const {
 }
 
 bool HalGPIO::wasTouchReleased() const { return touchState.releasedThisFrame; }
+
+bool HalGPIO::wasTouchReleasedAt(float &nx, float &ny) const {
+  if (!wasTouchReleased())
+    return false;
+  nx = touchState.currentNx;
+  ny = touchState.currentNy;
+  return true;
+}
 
 bool HalGPIO::isTouchTapCandidate(float &nx, float &ny,
                                   unsigned long &heldMs) const {
@@ -1070,7 +1313,14 @@ void HalGPIO::startDeepSleep() {
       }
 
       if (e.type == SDL_KEYDOWN && !e.key.repeat &&
-          scancodeToButton(e.key.keysym.scancode) >= 0) {
+          e.key.keysym.scancode == SLIDE_SWITCH_SCANCODE) {
+        setToggleSwitch(!toggleSwitchOn);
+        continue;
+      }
+
+      if (e.type == SDL_KEYDOWN && !e.key.repeat &&
+          scancodeToButton(e.key.keysym.scancode) >= 0 &&
+          buttonAvailable(scancodeToButton(e.key.keysym.scancode))) {
         clearButtonState();
         SimulatorLifecycle::rebootAsPowerWake();
       }

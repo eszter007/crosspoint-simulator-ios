@@ -2,9 +2,10 @@
 
 #include <cstdint>
 
-// Simulator stand-in for lib/hal/HalHaptics.h: no motor, every call is a no-op.
+// Match the firmware feedback API; the host has no vibration motor.
 class HalHaptics {
- public:
-  static void longPress(bool, uint8_t) {}
-  static void feedback(bool, bool, uint8_t) {}
+public:
+  static void longPress(bool /*enabled*/, uint8_t /*intensity*/) {}
+  static void feedback(bool /*enabled*/, bool /*pressed*/,
+                       uint8_t /*intensity*/) {}
 };

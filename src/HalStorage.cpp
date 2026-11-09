@@ -1,11 +1,14 @@
 #include "HalStorage.h"
 #include <MatchaContainer.h>
 
+#include "SimulatorStorageRoot.h"
+
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 
 #include <ctime>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -22,22 +25,7 @@ HalStorage HalStorage::instance;
 HalStorage::HalStorage() {}
 
 namespace {
-std::string configuredStorageRoot() {
-  const char *root = std::getenv("CROSSPOINT_SIM_SD");
-  if (!root || !*root) {
-    root = std::getenv("CROSSPOINT_EMU_SD");
-  }
-  if (root && *root) {
-    return std::string(root);
-  }
-  // Platforms with no usable working directory name their own location; on iOS
-  // that is the app's sandboxed Documents directory. Still overridable above,
-  // so a desktop run is unaffected.
-  if (const char *documents = simPlatformDocumentsPath()) {
-    return std::string(documents);
-  }
-  return std::string("./fs_");
-}
+using crosspoint_simulator::storageRoot;
 
 bool containsUnsafeSegment(const std::string &path) {
   std::stringstream stream(path);
@@ -64,7 +52,7 @@ std::string resolveStoragePath(const char *path) {
     logical.erase(logical.begin());
   }
 
-  std::string root = configuredStorageRoot();
+  std::string root = storageRoot();
   while (root.size() > 1 && root.back() == '/') {
     root.pop_back();
   }
@@ -93,7 +81,7 @@ bool ensureParentDirectories(const std::string &full) {
 } // namespace
 
 bool HalStorage::begin() {
-  const std::string root = configuredStorageRoot();
+  const std::string root = storageRoot();
   for (size_t i = 1; i < root.size(); ++i) {
     if (root[i] == '/') {
       ::mkdir(root.substr(0, i).c_str(), 0777);
@@ -108,6 +96,7 @@ void HalStorage::endUsbDrive() {}
 UsbDriveState HalStorage::usbDriveState() const {
   return UsbDriveState::Unsupported;
 }
+bool HalStorage::usbDriveHostSuspended() const { return false; }
 
 class HalFile::Impl {
 public:
@@ -118,7 +107,7 @@ public:
   // included. This is the directory's position: a telldir() cookie is only valid for the DIR*
   // that produced it, and the firmware's library walk reopens a directory and seeks back to
   // where it left off, so a cookie would restart the listing and loop forever.
-  size_t dirPos = 0;
+  size_t directoryPosition = 0;
   // Set for an entry of a .matcha container: fd is the container, read through a window.
   bool windowed = false;
   off_t windowStart = 0;
@@ -140,7 +129,7 @@ public:
   bool openAsDir(const char *p) {
     path = p;
     dir = opendir(p);
-    dirPos = 0;
+    directoryPosition = 0;
     return dir != nullptr;
   }
 
@@ -255,10 +244,10 @@ bool HalFile::seekSet(size_t offset) {
   // library walk closes a directory to descend into a child and reopens it.
   if (impl && impl->dir) {
     rewinddir(impl->dir);
-    impl->dirPos = 0;
-    while (impl->dirPos < offset && readdir(impl->dir) != nullptr)
-      impl->dirPos++;
-    return impl->dirPos == offset;
+    impl->directoryPosition = 0;
+    while (impl->directoryPosition < offset && readdir(impl->dir) != nullptr)
+      impl->directoryPosition++;
+    return impl->directoryPosition == offset;
   }
   if (!impl || impl->fd < 0)
     return false;
@@ -268,6 +257,12 @@ bool HalFile::seekSet(size_t offset) {
     return lseek(impl->fd, impl->windowStart + (off_t)offset, SEEK_SET) >= 0;
   }
   return lseek(impl->fd, (off_t)offset, SEEK_SET) >= 0;
+}
+bool HalFile::truncate(uint64_t length) {
+  if (!impl || impl->fd < 0 ||
+      length > static_cast<uint64_t>(std::numeric_limits<off_t>::max()))
+    return false;
+  return ftruncate(impl->fd, static_cast<off_t>(length)) == 0;
 }
 int HalFile::available() const {
   if (!impl || impl->fd < 0)
@@ -281,7 +276,7 @@ int HalFile::available() const {
 }
 size_t HalFile::position() const {
   if (impl && impl->dir)
-    return impl->dirPos;
+    return impl->directoryPosition;
   if (!impl || impl->fd < 0)
     return 0;
   off_t pos = lseek(impl->fd, 0, SEEK_CUR);
@@ -340,7 +335,7 @@ bool HalFile::isDirectory() const { return impl && impl->isDir(); }
 void HalFile::rewindDirectory() {
   if (impl && impl->dir) {
     rewinddir(impl->dir);
-    impl->dirPos = 0;
+    impl->directoryPosition = 0;
   }
 }
 bool HalFile::close() {
@@ -363,7 +358,7 @@ HalFile HalFile::openNextFile() {
     struct dirent *entry = readdir(impl->dir);
     if (!entry)
       return HalFile();
-    impl->dirPos++;
+    impl->directoryPosition++;
     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
       continue; // skip . and ..
 
@@ -460,6 +455,9 @@ bool HalStorage::rename(const char *oldPath, const char *newPath) {
   ensureParentDirectories(n);
   return ::rename(o.c_str(), n.c_str()) == 0;
 }
+bool HalStorage::replaceFile(const char *tmpPath, const char *path) {
+  return rename(tmpPath, path);
+}
 static bool removeDirRecursive(const std::string &full) {
   DIR *d = opendir(full.c_str());
   if (!d)
@@ -529,6 +527,23 @@ size_t HalStorage::readFileToBuffer(const char *path, char *buffer,
     n = 0;
   buffer[n] = '\0';
   return n;
+}
+bool HalStorage::readFileToString(const char *moduleName,
+                                  const std::string &path, size_t cap,
+                                  std::string &out) {
+  out.clear();
+  HalFile file;
+  if (!openFileForRead(moduleName, path, file) || file.isDirectory())
+    return false;
+  const size_t size = file.fileSize();
+  if (size == 0 || size > cap)
+    return false;
+  out.resize(size);
+  if (file.read(out.data(), size) != static_cast<int>(size)) {
+    out.clear();
+    return false;
+  }
+  return true;
 }
 bool HalStorage::writeFile(const char *path, const String &content) {
   HalFile f = open(path, O_WRONLY | O_CREAT | O_TRUNC);
@@ -607,28 +622,26 @@ std::vector<String> HalStorage::listFiles(const char *path, int maxFiles) {
   return result;
 }
 
-bool HalStorage::readFileToString(const char *moduleName, const std::string &path, size_t cap, std::string &out) {
-  (void)moduleName;
-  out.clear();
-  HalFile file;
-  if (!openFileForRead(moduleName, path, file)) return false;
-  if (file.isDirectory()) return false;
-  const size_t size = file.fileSize();
-  if (size == 0 || size > cap) return false;
-  out.resize(size);
-  const int got = file.read(reinterpret_cast<uint8_t *>(&out[0]), size);
-  if (got != static_cast<int>(size)) {
-    out.clear();
+uint64_t HalStorage::sdTotalBytes() {
+  struct statvfs vfs;
+
+  if (statvfs(resolveStoragePath(NULL).c_str(), &vfs) != 0) {
+    return 0;
+  }
+
+  return (uint64_t)vfs.f_blocks * ((vfs.f_frsize != 0) ? vfs.f_frsize : vfs.f_bsize);
+}
+
+bool HalStorage::sdUsedBytes(uint64_t& usedBytes) {
+  struct statvfs vfs;
+
+  if (statvfs(resolveStoragePath(NULL).c_str(), &vfs) != 0) {
+    usedBytes = 0;
     return false;
   }
+
+  uint64_t bsize = (vfs.f_frsize != 0) ? vfs.f_frsize : vfs.f_bsize;
+  usedBytes = (uint64_t)(vfs.f_blocks - vfs.f_bfree) * bsize;
+
   return true;
-}
-
-bool HalFile::truncate(uint64_t length) {
-  if (!impl || impl->fd < 0 || impl->dir) return false;
-  return ftruncate(impl->fd, static_cast<off_t>(length)) == 0;
-}
-
-bool HalStorage::replaceFile(const char *tmpPath, const char *path) {
-  return rename(tmpPath, path);
 }

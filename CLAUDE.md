@@ -49,6 +49,13 @@ The simulator is a collection of host-side reimplementations of the firmware's h
   [sample-platformio-linux-wsl.ini](sample-platformio-linux-wsl.ini). Keep
   both in sync when build flags change. Native Windows is not supported, WSL
   is.
+- Screen text: [run_simulator.py](run_simulator.py) adds a build middleware
+  to the firmware's `lib/GfxRenderer` builder that compiles a patched copy of
+  `GfxRenderer.cpp` from the build directory, with one
+  `simulatorScreenText()` call in `drawText()`. The firmware checkout is never
+  edited; when the anchor line is gone the original file is compiled.
+  [src/SimScreenText.cpp](src/SimScreenText.cpp) collects the strings between
+  `clearScreen()` and a refresh.
 - Linker stubs: [src/firmware_link_stubs.cpp](src/firmware_link_stubs.cpp) provides symbols the firmware expects from other translation units (uzlib checksums, HWCDC Serial shim, LUT stubs). When the firmware adds a new global-extern symbol with no simulator counterpart, add its stub here.
 
 ## Device profiles and input mapping
@@ -57,7 +64,9 @@ The simulator is a collection of host-side reimplementations of the firmware's h
 `SIMULATOR_DEVICE_X3` for X3, `SIMULATOR_DEVICE_X4_PRO` for X4 Pro, and
 `SIMULATOR_DEVICE_X4_CLASSIC` for X4 Classic,
 `SIMULATOR_DEVICE_STICKY` for Seeed Sticky, or
-`SIMULATOR_DEVICE_PAPERMONO` for M5Stack PaperMono.
+`SIMULATOR_DEVICE_PAPERMONO` for M5Stack PaperMono, or
+`SIMULATOR_DEVICE_METALIO_EINK4` for Metalio E-Ink 4, or
+`SIMULATOR_DEVICE_EEGO_A4` for EEGO A4, or `SIMULATOR_DEVICE_PICCO` for Picco.
 `SIMULATOR_DISPLAY_UC8179` and `SIMULATOR_DISPLAY_UC8279` select per-batch
 controller revisions without changing a device's geometry or capabilities.
 Keep the reported board and controller aligned with the firmware SDK. X4 Pro
@@ -69,11 +78,32 @@ side buttons, and front buttons without touch, a Home key, or frontlight.
 PaperMono uses an 800x480 SSD1677 panel with FT6336-compatible touch, RTC, and
 single-channel frontlight state, without a Home key or tilt.
 
+Metalio uses an 800x480 SSD1677 panel with CST816S touch, a cover Home key,
+RTC, tilt, and haptic settings, without a frontlight. Only Confirm, Power,
+Up, and Down button contacts are available; Back/Left/Right are disabled.
+Up/Down model volume and cover Prev/Next keys. Haptic calls are host no-ops.
+
+EEGO A4 uses a 768x552 UC8279C panel, GSLX680 touch, RTC, Up/Down/Power
+buttons and an optional warm/cool I2C frontlight. `SIMULATOR_EEGO_NO_FRONTLIGHT`
+models a lightless unit. Keep the SDK Home-key capability mismatch visible;
+see [docs/eego-a4.md](docs/eego-a4.md).
+
 `HalGPIO::update` owns the SDL event pump for the whole simulator, do not poll SDL events elsewhere. Scancodes map to button indices `BTN_BACK=0` through `BTN_POWER=6`. `SDL_QUIT` sets the `quitRequested` atomic that `HalDisplay::shouldQuit()` reads.
+
+Picco uses 800x480, Tma525c touch, RTC/tilt availability and I2C warm/cool
+frontlight state. There is no Home key. T toggles its slide switch; scripted
+`SWITCH_ON`/`SWITCH_OFF` and `CROSSPOINT_SIM_SLIDE_SWITCH=on` set its level.
+The level survives sleep/relaunch. Firmware applies the selected binding;
+the host must not change the binding/settings itself. The charger hold remains
+unmodeled. See [docs/picco.md](docs/picco.md) for provisional input and hardware
+limits.
 
 For repeatable QA, `CROSSPOINT_SIM_INPUT_SCRIPT` schedules synthetic key and
 touch-device edges through the same `HalGPIO` state as real SDL input, and
 `CROSSPOINT_SIM_SCREENSHOTS` captures renderer output on the SDL main thread.
+Script `WAIT` steps match firmware serial lines kept by
+[src/SimLog.cpp](src/SimLog.cpp) and start a new timing segment; `SHOT`
+requests a capture from the input path.
 Keep synthetic held-time timestamps on the `SDL_GetTicks()` clock used by real
 keyboard events; the firmware's `millis()` clock has a different origin. The
 deep-sleep loop must also process synthetic input. Process relaunch promotes

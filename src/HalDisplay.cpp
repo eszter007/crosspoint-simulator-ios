@@ -1,5 +1,6 @@
 #include "HalDisplay.h"
 #include "HalFrontlight.h"
+#include "SimScreenText.h"
 #include "SimulatorOnScreenControls.h"
 #include "SimulatorPlatform.h"
 
@@ -47,6 +48,7 @@ struct GrayscalePreviewState {
   bool bwBaseValid = false;
   bool lsbValid = false;
   bool msbValid = false;
+  bool absolute = false;
 };
 
 constexpr uint8_t kGrayWhite = 255;
@@ -64,6 +66,8 @@ struct ScreenshotEvent {
   bool handled = false;
 };
 
+// Script SHOT actions add to the schedule from the input path.
+std::mutex screenshotMutex;
 std::vector<ScreenshotEvent> screenshotEvents;
 bool screenshotEventsInitialized = false;
 const std::thread::id simulatorMainThread = std::this_thread::get_id();
@@ -96,6 +100,7 @@ void initializeScreenshotEvents() {
 }
 
 bool hasDueScreenshot() {
+  const std::lock_guard<std::mutex> lock(screenshotMutex);
   initializeScreenshotEvents();
   const unsigned long now = millis();
   for (const auto &event : screenshotEvents) {
@@ -158,6 +163,7 @@ bool savePanelBmp(const std::string &path) {
 }
 
 void captureDueScreenshots() {
+  const std::lock_guard<std::mutex> lock(screenshotMutex);
   const unsigned long now = millis();
   for (auto &event : screenshotEvents) {
     if (event.handled || event.atMs > now)
@@ -236,7 +242,23 @@ void composeGrayscalePreview() {
           getBit(grayscalePreviewState.msbPlane.data(), x, y);
 
       uint8_t level = kGrayWhite;
-      if (!baseWhite) {
+      if (grayscalePreviewState.absolute) {
+        const uint8_t value = (lsbActive ? 1 : 0) | (msbActive ? 2 : 0);
+        switch (value) {
+          case 0:
+            level = kGrayBlack;
+            break;
+          case 1:
+            level = kGrayDark;
+            break;
+          case 2:
+            level = kGrayLight;
+            break;
+          default:
+            level = kGrayWhite;
+            break;
+        }
+      } else if (!baseWhite) {
         if (msbActive) {
           level = lsbActive ? kGrayDark : kGrayLight;
         } else if (lsbActive) {
@@ -255,6 +277,12 @@ void composeGrayscalePreview() {
 }
 
 } // namespace
+
+void scheduleSimulatorScreenshot(const std::string &path) {
+  const std::lock_guard<std::mutex> lock(screenshotMutex);
+  initializeScreenshotEvents();
+  screenshotEvents.push_back({millis(), path});
+}
 
 static bool isPortraitOrientation(GfxRenderer::Orientation orientation) {
   return orientation == GfxRenderer::Portrait ||
@@ -308,7 +336,30 @@ HalDisplay::~HalDisplay() {}
 #define SIMULATOR_CONTROLLER_TITLE "SSD1677"
 #endif
 
-#if defined(SIMULATOR_DEVICE_PAPERMONO)
+const char* HalDisplay::controllerName() const {
+  switch (BoardConfig::ACTIVE.displayController) {
+    case BoardConfig::DisplayController::UC8253:
+      return "UC8253";
+    case BoardConfig::DisplayController::UC8279C:
+      return "UC8279C";
+    case BoardConfig::DisplayController::UC8179:
+      return "UC8179";
+    case BoardConfig::DisplayController::UC8279:
+      return "UC8279";
+    case BoardConfig::DisplayController::SSD1677:
+    default:
+      return "SSD1677";
+  }
+}
+
+#if defined(SIMULATOR_DEVICE_PICCO)
+static constexpr const char *WINDOW_TITLE = "Simulator - BOOX Picco";
+#elif defined(SIMULATOR_DEVICE_EEGO_A4)
+static constexpr const char *WINDOW_TITLE = "Simulator - EEGO A4 (UC8279C)";
+#elif defined(SIMULATOR_DEVICE_METALIO_EINK4)
+static constexpr const char *WINDOW_TITLE =
+    "Simulator - Metalio E-Ink 4 (SSD1677)";
+#elif defined(SIMULATOR_DEVICE_PAPERMONO)
 static constexpr const char *WINDOW_TITLE =
     "Simulator - M5Stack PaperMono (SSD1677)";
 #elif defined(SIMULATOR_DEVICE_STICKY)
@@ -387,6 +438,7 @@ void HalDisplay::begin(bool /*seamless*/) { begin(); }
 
 void HalDisplay::clearScreen(uint8_t color) const {
   memset(getFrameBuffer(), color, BUFFER_SIZE);
+  sim_screen_text::clear();
 }
 
 void HalDisplay::drawImage(const uint8_t *imageData, uint16_t x, uint16_t y,
@@ -462,6 +514,7 @@ void HalDisplay::refreshDisplay(RefreshMode /*mode*/, bool /*turnOffScreen*/) {
   const uint8_t *fb = getFrameBuffer();
   snapshotBwBase(fb);
   renderBwPixels(fb);
+  sim_screen_text::flush();
 }
 
 // Called from the main thread (simulator_main.cpp) to push pixels to SDL.
@@ -582,6 +635,23 @@ void HalDisplay::returnFrameBufferStorage() {
   frameBufferLent = false;
 }
 
+HalDisplay::Controller HalDisplay::getController() const {
+  return BoardConfig::ACTIVE.displayController;
+}
+
+HalDisplay::GrayscaleCapabilities HalDisplay::grayscaleCapabilities(
+    GrayscaleMode mode) const {
+  if (mode == GrayscaleMode::Absolute || mode == GrayscaleMode::Direct) {
+    return {GrayscaleEncoding::AbsolutePlanes,
+            mode == GrayscaleMode::Direct ? GrayscaleBase::Combined : GrayscaleBase::Separate,
+            true, false, false};
+  }
+  return {GrayscaleEncoding::OverlayMasks,
+          combinesGrayscaleBase() ? GrayscaleBase::Combined
+                                  : GrayscaleBase::Separate,
+          true, false, false};
+}
+
 void HalDisplay::copyGrayscaleBuffers(const uint8_t *lsbBuffer,
                                       const uint8_t *msbBuffer) {
   copyGrayscaleLsbBuffers(lsbBuffer);
@@ -589,11 +659,24 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t *lsbBuffer,
 }
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback,
                                       bool turnOffScreen) {
+  grayscalePreviewState.absolute = false;
   if (combinesGrayscaleBase()) {
     snapshotBwBase(getFrameBuffer());
     return;
   }
   displayBuffer(fallback, turnOffScreen);
+}
+bool HalDisplay::displayGrayscaleBase(GrayscaleMode mode,
+                                      RefreshMode fallback,
+                                      bool turnOffScreen) {
+  if (!grayscaleCapabilities(mode).supported()) return false;
+  grayscalePreviewState.absolute = mode != GrayscaleMode::Overlay;
+  if (combinesGrayscaleBase() && mode == GrayscaleMode::Overlay) {
+    snapshotBwBase(getFrameBuffer());
+    return true;
+  }
+  displayBuffer(fallback, turnOffScreen);
+  return true;
 }
 void HalDisplay::preconditionGrayscale() {}
 void HalDisplay::preconditionGrayscale(uint16_t, uint16_t, uint16_t, uint16_t) {
@@ -640,43 +723,11 @@ void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t *rows,
   }
 }
 bool HalDisplay::supportsStripGrayscale() const { return true; }
-bool HalDisplay::combinesGrayscaleBase() const {
-  return BoardConfig::isPaperMono();
-}
-
-HalDisplay::Controller HalDisplay::getController() const {
-  return BoardConfig::ACTIVE.displayController;
-}
-
-// ponytail: overlay masks only. The preview compositor in this file reads the
-// LSB/MSB planes as overlay masks over the B/W base, so absolute planes would
-// render as garbage; teach composeGrayscalePreview() the absolute encoding
-// before reporting it here. Direct is Absolute's encoding with a combined
-// activation, so it is out for the same reason.
-HalDisplay::GrayscaleCapabilities
-HalDisplay::grayscaleCapabilities(const GrayscaleMode mode) const {
-  if (mode != GrayscaleMode::Overlay) {
-    return {};
-  }
-  return {GrayscaleEncoding::OverlayMasks,
-          combinesGrayscaleBase() ? GrayscaleBase::Combined
-                                  : GrayscaleBase::Separate,
-          /*stripUploads=*/true, /*asyncBase=*/false,
-          /*stagingWhileBusy=*/false};
-}
-
 bool HalDisplay::supportsAsyncGrayscaleBase() const {
   return grayscaleCapabilities().asyncBase;
 }
-
-bool HalDisplay::displayGrayscaleBase(const GrayscaleMode mode,
-                                      const RefreshMode fallback,
-                                      const bool turnOffScreen) {
-  if (!grayscaleCapabilities(mode).supported()) {
-    return false;
-  }
-  displayGrayscaleBase(fallback, turnOffScreen);
-  return true;
+bool HalDisplay::combinesGrayscaleBase() const {
+  return BoardConfig::isPaperMono();
 }
 
 uint16_t HalDisplay::getDisplayWidth() const { return DISPLAY_WIDTH; }

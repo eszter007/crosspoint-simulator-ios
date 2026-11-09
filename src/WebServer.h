@@ -51,6 +51,31 @@ const int CONTENT_LENGTH_UNKNOWN = -1;
 
 class WebServer;
 
+// Same interface as arduino-esp32's middleware/Middleware.h. Each middleware
+// runs before route dispatch and calls next() to continue the chain.
+class Middleware {
+public:
+  typedef std::function<bool(void)> Callback;
+  typedef std::function<bool(WebServer &server, Callback next)> Function;
+
+  virtual ~Middleware() {}
+  virtual bool run(WebServer &server, Callback next) {
+    (void)server;
+    return next();
+  }
+};
+
+class MiddlewareFunction : public Middleware {
+public:
+  MiddlewareFunction(Middleware::Function fn) : _fn(fn) {}
+  bool run(WebServer &server, Middleware::Callback next) override {
+    return _fn(server, next);
+  }
+
+private:
+  Middleware::Function _fn;
+};
+
 class RequestHandler {
 public:
   virtual ~RequestHandler() {}
@@ -68,16 +93,10 @@ public:
   }
 };
 
-// Captive-portal middleware: the simulator has no access point, so it is never run.
-class Middleware {
- public:
-  using Callback = std::function<bool()>;
-};
-
 class WebServer {
 public:
   WebServer(int port);
-  ~WebServer();
+  virtual ~WebServer();
   void begin();
   void handleClient();
   void enableCORS(bool /*enabled*/) {
@@ -90,7 +109,9 @@ public:
   void collectHeaders(const char **headers, size_t count);
   void stop();
   void addHandler(RequestHandler *handler);
-  WebServer &addMiddleware(std::function<bool(WebServer &, Middleware::Callback)>) { return *this; }
+  WebServer &addMiddleware(Middleware *middleware);
+  WebServer &addMiddleware(Middleware::Function fn);
+  WebServer &removeMiddleware(Middleware *middleware);
   void send(int code, const char *content_type, const char *content);
   void send(int code, const char *content_type, const String &content) {
     send(code, content_type, content.c_str());
@@ -124,18 +145,18 @@ public:
   HTTPUpload &upload();
 
 protected:
-  // Mirrors Arduino's WebServer argument storage so firmware that releases it
-  // between requests (CrossPointHttpServer) compiles; the stub never fills it.
-  struct RequestArgument {
-    String key;
-    String value;
-  };
-  int _currentArgCount = 0;
+  NetworkClient _currentClient;
+  virtual size_t _currentClientWrite(const char *buffer, size_t len);
+  virtual size_t _currentClientWrite_P(const char *buffer, size_t len);
+  struct RequestArgument { String key; String value; };
   RequestArgument *_currentArgs = nullptr;
-  int _postArgsLen = 0;
+  int _currentArgCount = 0;
   RequestArgument *_postArgs = nullptr;
+  int _postArgsLen = 0;
 
 private:
+  void clearArguments();
+  void publishArguments();
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

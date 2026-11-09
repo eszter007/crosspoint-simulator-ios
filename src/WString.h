@@ -9,8 +9,8 @@
 #endif
 
 #include <cstdint>
-#include <cstring>
 #include <cctype>
+#include <cstring>
 #include <string>
 
 class String {
@@ -20,6 +20,12 @@ public:
   String(const char *str) : s(str ? str : "") {}
   explicit String(const std::string &str) : s(str) {}
   String(uint16_t num) : s(std::to_string(num)) {}
+  auto begin() const { return s.begin(); }
+  auto end() const { return s.end(); }
+  void toLowerCase() {
+    for (char &c : s)
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
 
   String &operator=(const char *str) {
     s = str ? str : "";
@@ -111,14 +117,16 @@ public:
     replace(find.s.c_str(), replaceWith.s.c_str());
   }
   bool isEmpty() const { return s.empty(); }
-  void toLowerCase() { for (auto &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c))); }
   void toUpperCase() { for (auto &c : s) c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
-  const char *begin() const { return s.data(); }
-  const char *end() const { return s.data() + s.size(); }
-  void remove(unsigned int index) { if (index < s.size()) s.erase(index); }
   void remove(unsigned int index, unsigned int count) { if (index < s.size()) s.erase(index, count); }
-  bool reserve(unsigned int size) { s.reserve(size); return true; }
   size_t length() const { return s.length(); }
+  void remove(size_t index) {
+    if (index < s.size()) s.erase(index);
+  }
+  bool reserve(size_t capacity) {
+    s.reserve(capacity);
+    return true;
+  }
   const char *c_str() const { return s.c_str(); }
   bool operator==(const char *other) const { return s == (other ? other : ""); }
   bool operator!=(const char *other) const { return !(*this == other); }

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 
 #include "Arduino.h"
 #include "HalMemory.h"
@@ -31,3 +32,7 @@ inline size_t heap_caps_get_minimum_free_size(uint32_t /*caps*/) { return ESP.ge
 inline size_t heap_caps_get_total_size(uint32_t caps) {
   return heap_caps_wants_psram(caps) ? HalMemory::getPsramHeap().totalBytes : ESP.getHeapSize();
 }
+
+inline void *heap_caps_malloc(const size_t size, unsigned /*caps*/) { return std::malloc(size); }
+inline void *heap_caps_realloc(void *ptr, const size_t size, unsigned /*caps*/) { return std::realloc(ptr, size); }
+inline void heap_caps_free(void *ptr) { std::free(ptr); }

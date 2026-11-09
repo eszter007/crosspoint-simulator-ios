@@ -9,10 +9,10 @@ enum wifi_ps_type_t {
 };
 
 inline esp_err_t esp_wifi_set_ps(wifi_ps_type_t) { return ESP_OK; }
-inline esp_err_t esp_wifi_get_ps(wifi_ps_type_t *type) {
-  if (type) *type = static_cast<wifi_ps_type_t>(0);
+inline esp_err_t esp_wifi_set_max_tx_power(int8_t) { return ESP_OK; }
+inline esp_err_t esp_wifi_get_ps(wifi_ps_type_t *ps) {
+  if (!ps) return ESP_ERR_INVALID_ARG;
+  *ps = WIFI_PS_NONE;
   return ESP_OK;
 }
 inline esp_err_t esp_wifi_stop() { return ESP_OK; }
-
-inline esp_err_t esp_wifi_set_max_tx_power(int8_t) { return ESP_OK; }

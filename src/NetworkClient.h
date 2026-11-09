@@ -6,6 +6,7 @@
 
 #include "Print.h"
 #include "WString.h"
+#include "Print.h"
 
 class Stream;
 

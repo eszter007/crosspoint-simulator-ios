@@ -20,6 +20,7 @@ class HalClock {
   bool hasTime() const { return _available || systemTimeValid(); }
   bool getTime(uint8_t& hour, uint8_t& minute) const;
   bool getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const;
+  bool formatTime(char *buf, size_t bufSize, bool use12Hour = false) const;
   bool formatTime(char* buf, size_t bufSize,
                   uint8_t utcOffsetQuarterHoursBiased = 48,
                   bool use12Hour = false) const;

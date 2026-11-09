@@ -26,10 +26,17 @@ void HalFrontlight::begin(uint8_t brightness, uint8_t warmth, bool on) {
             << std::endl;
 }
 
-bool HalFrontlight::present() const { return BoardConfig::hasPwmFrontlight(); }
+bool HalFrontlight::present() const {
+#if !defined(SIMULATOR_EEGO_NO_FRONTLIGHT)
+  if (BoardConfig::hasI2cFrontlight())
+    return true;
+#endif
+  return BoardConfig::hasPwmFrontlight();
+}
 
 bool HalFrontlight::hasColorTemperature() const {
-  return BoardConfig::isX4Pro();
+  return BoardConfig::isX4Pro() ||
+         ((BoardConfig::isEegoA4() || BoardConfig::isPicco()) && present());
 }
 
 void HalFrontlight::setBrightness(uint8_t percent) {

@@ -1,32 +1,22 @@
 #pragma once
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
-#include <map>
-#include <string>
 
-// Simulator stand-in for the ESP32 Preferences (NVS) API: an in-memory store
-// that lives for the process. Enough for TrustedTime's single int64 slot.
 class Preferences {
  public:
-  bool begin(const char *name, bool readOnly = false) {
-    (void)readOnly;
-    ns_ = name ? name : "";
-    return true;
+  bool begin(const char*, bool = false) { return true; }
+  int64_t getLong64(const char*, int64_t defaultValue = 0) const {
+    const int64_t value = floor_.load();
+    return value ? value : defaultValue;
   }
-  void end() {}
-  int64_t getLong64(const char *key, int64_t fallback = 0) {
-    const auto it = store().find(ns_ + "/" + key);
-    return it == store().end() ? fallback : it->second;
-  }
-  size_t putLong64(const char *key, int64_t value) {
-    store()[ns_ + "/" + key] = value;
+  size_t putLong64(const char*, int64_t value) {
+    floor_.store(value);
     return sizeof(value);
   }
+  void end() {}
 
  private:
-  static std::map<std::string, int64_t> &store() {
-    static std::map<std::string, int64_t> s;
-    return s;
-  }
-  std::string ns_;
+  inline static std::atomic<int64_t> floor_{0};
 };

@@ -10,11 +10,14 @@
 #include <string>
 #include <thread>
 
+#include "freertos/FreeRTOS.h"
+
 #define PROGMEM
 #define ICACHE_RODATA_ATTR
 #define IRAM_ATTR
 #define DRAM_ATTR
 #define RTC_NOINIT_ATTR
+#define SET_LOOP_TASK_STACK_SIZE(bytes)
 #define PGM_P const char *
 #define PSTR(s) (s)
 
@@ -34,6 +37,7 @@ inline void delay(unsigned long ms) {
   std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 inline void yield() { std::this_thread::yield(); }
+inline void configTzTime(const char *, const char *) {}
 
 // Native builds have no GPIO pins. Treat every input as released, matching the
 // idle pull-up state used by the button diagnostics in firmware startup.
@@ -77,11 +81,10 @@ struct ESPMock {
   }
 
   // The About screen prints the silicon it is running on. Report the part the
-  // selected board actually carries, so the simulator's About screen matches
-  // the device's rather than inventing a chip.
-  const char *getChipModel() { return FREEINK_MCU_C3 ? "ESP32-C3" : "ESP32-S3"; }
-  uint8_t getChipRevision() { return 3; }
-  uint32_t getFlashChipSize() { return 16u * 1024u * 1024u; }
+  // selected board actually carries, so it matches the device.
+  const char *getChipModel() const { return FREEINK_MCU_C3 ? "ESP32-C3" : "ESP32-S3"; }
+  uint32_t getChipRevision() const { return 3; }
+  uint32_t getFlashChipSize() const { return 16U * 1024U * 1024U; }
 };
 extern ESPMock ESP;
 

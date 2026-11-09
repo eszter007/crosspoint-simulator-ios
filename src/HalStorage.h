@@ -33,8 +33,9 @@ public:
   bool disconnectUsbDriveHost();
   void endUsbDrive();
   UsbDriveState usbDriveState() const;
-  // No USB device stack here, so a host can never suspend one.
-  bool usbDriveHostSuspended() const { return false; }
+  bool usbDriveHostSuspended() const;
+  uint64_t sdTotalBytes();
+  bool sdUsedBytes(uint64_t& usedBytes);
   std::vector<String> listFiles(const char *path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on
   // failure.
@@ -43,13 +44,12 @@ public:
   // Stream the file contents to a `Print` (e.g. `Serial`, or any
   // `Print`-derived object). Returns true on success, false on failure.
   bool readFileToStream(const char *path, Print &out, size_t chunkSize = 256);
-  // Moves tmpPath over path (the SD-card atomic-replace used for journals and catalogs).
-  bool replaceFile(const char *tmpPath, const char *path);
-  bool readFileToString(const char *moduleName, const std::string &path, size_t cap, std::string &out);
   // Read up to `bufferSize-1` bytes into `buffer`, null-terminating it. Returns
   // bytes read.
   size_t readFileToBuffer(const char *path, char *buffer, size_t bufferSize,
                           size_t maxBytes = 0);
+  bool readFileToString(const char *moduleName, const std::string &path,
+                        size_t cap, std::string &out);
   // Write a string to `path` on the SD card. Overwrites existing file.
   // Returns true on success.
   bool writeFile(const char *path, const String &content);
@@ -60,14 +60,9 @@ public:
   HalFile open(const char *path, const oflag_t oflag = O_RDONLY);
   bool mkdir(const char *path, const bool pFlag = true);
   bool exists(const char *path);
-  // The simulated card reports no size; About shows it as unknown.
-  uint64_t sdTotalBytes() { return 0; }
-  bool sdUsedBytes(uint64_t &usedBytes) {
-    usedBytes = 0;
-    return false;
-  }
   bool remove(const char *path);
   bool rename(const char *oldPath, const char *newPath);
+  bool replaceFile(const char *tmpPath, const char *path);
   bool rmdir(const char *path);
 
   bool openFileForRead(const char *moduleName, const char *path, HalFile &file);

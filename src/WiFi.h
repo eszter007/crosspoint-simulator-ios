@@ -9,6 +9,11 @@
 #include <utility>
 #include <vector>
 
+using arduino_event_id_t = int;
+using arduino_event_info_t = int;
+inline constexpr arduino_event_id_t ARDUINO_EVENT_WIFI_STA_START = 0;
+inline constexpr arduino_event_id_t ARDUINO_EVENT_WIFI_AP_START = 1;
+
 // On ESP32, WiFiClient is a TCP client backed by the WiFi stack.
 // In the simulator NetworkClient already provides the same interface.
 using WiFiClient = NetworkClient;
@@ -63,22 +68,12 @@ public:
   bool operator!=(const IPAddress &o) const { return !(*this == o); }
 };
 
-enum arduino_event_id_t { ARDUINO_EVENT_WIFI_STA_START, ARDUINO_EVENT_WIFI_AP_START };
-struct arduino_event_info_t {};
-
 class WiFiClass {
   struct Network {
     String ssid;
     int32_t rssi;
     wifi_auth_mode_t auth;
   };
-
- public:
-  // The simulator has no radio events; handlers are accepted and never fire.
-  template <typename F>
-  int onEvent(F, arduino_event_id_t) {
-    return 0;
-  }
 
  private:
 
@@ -178,6 +173,9 @@ class WiFiClass {
   }
 
 public:
+  template <typename Callback>
+  void onEvent(Callback &&, arduino_event_id_t) {}
+
   wl_status_t begin(const char *ssid = nullptr, const char *pass = nullptr) {
     (void)pass;
     currentMode = WIFI_STA;

@@ -1,5 +1,6 @@
 #pragma once
 
+#ifdef __APPLE__
 // Simulator stand-in for wolfCrypt's AES. CBC and SHA-256 are real
 // (CommonCrypto); GCM is a process-consistent keystream stand-in so a key
 // wrapped here unwraps here, which is all the simulator needs.
@@ -90,3 +91,27 @@ inline int wc_AesGcmDecrypt(Aes *aes, byte *out, const byte *in, word32 sz, cons
   wolf_sim::xorStream(aes, out, in, sz, iv, ivSz);
   return 0;
 }
+#else
+#include <cstdint>
+
+using byte = uint8_t;
+using word32 = uint32_t;
+constexpr int INVALID_DEVID = -2;
+struct Aes {};
+constexpr int AES_ENCRYPTION = 0;
+inline int wc_AesSetKey(Aes *, const byte *, word32, const byte *, int) { return -1; }
+inline int wc_AesCbcEncrypt(Aes *, byte *, const byte *, word32) { return -1; }
+
+// Protected-book crypto is unsupported. Never report successful encryption or authentication.
+inline int wc_AesInit(Aes *, void *, int) { return -1; }
+inline void wc_AesFree(Aes *) {}
+inline int wc_AesGcmSetKey(Aes *, const byte *, word32) { return -1; }
+inline int wc_AesGcmEncrypt(Aes *, byte *, const byte *, word32, const byte *, word32, byte *, word32,
+                            const byte *, word32) {
+  return -1;
+}
+inline int wc_AesGcmDecrypt(Aes *, byte *, const byte *, word32, const byte *, word32, const byte *, word32,
+                            const byte *, word32) {
+  return -1;
+}
+#endif

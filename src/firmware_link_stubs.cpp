@@ -3,9 +3,43 @@
 // gated block in lib/Logging/Logging.cpp. The native simulator build needs its
 // own definitions to satisfy the linker.
 
+#include <Logging.h>
+
 #include <cstdint>
 
-#include <Logging.h>
+// The PlatformIO build skips the firmware's device binding (skip_device_content_protection.py) and
+// takes these instead; the iOS build compiles the real binding and ContentProtection sources.
+#ifndef SIMULATOR_IOS
+#include <ContentProtection.h>
+#include <Crypto.h>
+#include <LcpLicense.h>
+
+namespace freeink::content {
+
+// Protected-book key operations are unavailable in the host crypto backend.
+bool parseLcpLicense(const char*, size_t, LcpLicense*) {
+  LOG_ERR("LCP", "License import unsupported in simulator");
+  return false;
+}
+
+void lcpUserKey(Crypto& crypto, const char* passphrase, size_t len, uint8_t out[32]) {
+  crypto.sha256(reinterpret_cast<const uint8_t*>(passphrase), len, out);
+}
+
+bool lcpUnwrapContentKey(Crypto&, const uint8_t[32], const uint8_t[32], const uint8_t[12], const uint8_t[32],
+                         const uint8_t[16], uint8_t[32]) {
+  LOG_ERR("LCP", "Key unwrap unsupported in simulator");
+  return false;
+}
+
+}  // namespace freeink::content
+
+std::unique_ptr<freeink::content::ContentDecryptor> freeink::content::openProtectedBook(const std::string&,
+                                                                                        std::string& err) {
+  err.clear();
+  return nullptr;
+}
+#endif  // SIMULATOR_IOS
 
 // ---------------------------------------------------------------------------
 // MySerialImpl
@@ -18,23 +52,18 @@
 MySerialImpl MySerialImpl::instance;
 
 size_t MySerialImpl::write(uint8_t b) { return logSerial.write(b); }
-size_t MySerialImpl::write(const uint8_t *buffer, size_t size) {
-  return logSerial.write(buffer, size);
-}
+size_t MySerialImpl::write(const uint8_t* buffer, size_t size) { return logSerial.write(buffer, size); }
 void MySerialImpl::flush() { logSerial.flush(); }
 
-size_t MySerialImpl::printf(const char *format, ...) {
+size_t MySerialImpl::printf(const char* format, ...) {
   va_list args;
   va_start(args, format);
   char buf[256];
   const int len = vsnprintf(buf, sizeof(buf), format, args);
   va_end(args);
-  if (len <= 0)
-    return 0;
-  const size_t toWrite = (static_cast<size_t>(len) < sizeof(buf))
-                             ? static_cast<size_t>(len)
-                             : sizeof(buf) - 1;
-  return logSerial.write(reinterpret_cast<const uint8_t *>(buf), toWrite);
+  if (len <= 0) return 0;
+  const size_t toWrite = (static_cast<size_t>(len) < sizeof(buf)) ? static_cast<size_t>(len) : sizeof(buf) - 1;
+  return logSerial.write(reinterpret_cast<const uint8_t*>(buf), toWrite);
 }
 
 // ---------------------------------------------------------------------------
@@ -46,9 +75,8 @@ size_t MySerialImpl::printf(const char *format, ...) {
 // vendored in. Nothing in the firmware actually calls
 // `uzlib_uncompress_chksum`, but the symbols still need to resolve. Provide the
 // canonical reference implementations.
-extern "C" uint32_t uzlib_adler32(const void *data, unsigned int length,
-                                  uint32_t prev_sum) {
-  const unsigned char *buf = static_cast<const unsigned char *>(data);
+extern "C" uint32_t uzlib_adler32(const void* data, unsigned int length, uint32_t prev_sum) {
+  const unsigned char* buf = static_cast<const unsigned char*>(data);
   unsigned int s1 = prev_sum & 0xffff;
   unsigned int s2 = prev_sum >> 16;
   while (length--) {
@@ -58,14 +86,12 @@ extern "C" uint32_t uzlib_adler32(const void *data, unsigned int length,
   return (s2 << 16) | s1;
 }
 
-extern "C" uint32_t uzlib_crc32(const void *data, unsigned int length,
-                                uint32_t prev_crc) {
+extern "C" uint32_t uzlib_crc32(const void* data, unsigned int length, uint32_t prev_crc) {
   static const uint32_t crc32_tab[16] = {
-      0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4,
-      0x4db26158, 0x5005713c, 0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
-      0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c,
+      0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+      0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c, 0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c,
   };
-  const unsigned char *buf = static_cast<const unsigned char *>(data);
+  const unsigned char* buf = static_cast<const unsigned char*>(data);
   uint32_t crc = prev_crc ^ 0xffffffff;
   while (length--) {
     crc = crc32_tab[(crc ^ *buf) & 0x0f] ^ (crc >> 4);
