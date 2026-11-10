@@ -189,12 +189,17 @@ bool getBit(const uint8_t *buffer, int x, int y) {
   return (buffer[byteIdx] & (1 << bitIdx)) != 0;
 }
 
-void renderBwPixels(const uint8_t *fb) {
+// `previous` (nullable): the B/W image already on the panel. Pixels whose bit
+// matches it keep what they show, grays included, as a FAST e-ink wave only
+// drives the pixels that change.
+void renderBwPixels(const uint8_t *fb, const uint8_t *previous = nullptr) {
   const std::lock_guard<std::mutex> lock(pixelBufMutex);
   const bool invert = display.isInverted();
   for (int y = 0; y < HalDisplay::DISPLAY_HEIGHT; y++) {
     for (int x = 0; x < HalDisplay::DISPLAY_WIDTH; x++) {
       const bool white = getBit(fb, x, y);
+      if (previous && getBit(previous, x, y) == white)
+        continue;
       pixelBuf[y * HalDisplay::DISPLAY_WIDTH + x] =
           (white != invert) ? 0xFFFFFFFFu : 0xFF000000u;
     }
@@ -510,10 +515,18 @@ void HalDisplay::displayWindow(int, int, int, int) {
 
 // Called from the render task (background thread): convert framebuffer to
 // pixels and flag for present.
-void HalDisplay::refreshDisplay(RefreshMode /*mode*/, bool /*turnOffScreen*/) {
+void HalDisplay::refreshDisplay(RefreshMode mode, bool /*turnOffScreen*/) {
   const uint8_t *fb = getFrameBuffer();
+  // HALF/FULL waves drive every pixel, clearing grays; a FAST one leaves the
+  // unchanged pixels alone. An inversion change repaints everything.
+  static bool lastInverted = false;
+  const bool keepUnchanged = mode == RefreshMode::FAST_REFRESH &&
+                             grayscalePreviewState.bwBaseValid &&
+                             lastInverted == isInverted();
+  lastInverted = isInverted();
+  renderBwPixels(fb, keepUnchanged ? grayscalePreviewState.bwBase.data()
+                                   : nullptr);
   snapshotBwBase(fb);
-  renderBwPixels(fb);
   sim_screen_text::flush();
 }
 
