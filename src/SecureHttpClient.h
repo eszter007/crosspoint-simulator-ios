@@ -114,6 +114,18 @@ class SecureHttpClient {
   bool hasContentLength() const { return http_.hasContentLength(); }
   size_t getContentLength() const { return http_.getContentLength(); }
   std::string getHeader(const std::string& name) const { return http_.getHeader(name); }
+  // Every value of a header that may repeat (WWW-Authenticate), joined with ", " as the SDK does.
+  std::string getCombinedHeader(const char* lowercaseName) const {
+    std::string combined;
+    for (const auto& header : http_.getHeaders()) {
+      std::string name = header.first;
+      for (char& c : name) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+      if (name != lowercaseName) continue;
+      if (!combined.empty()) combined += ", ";
+      combined += header.second;
+    }
+    return combined;
+  }
   bool responseComplete() const { return http_.responseComplete() && !callbackStopped_ && !aborted_; }
   bool aborted() const { return aborted_; }
   bool callbackAborted() const { return callbackStopped_; }

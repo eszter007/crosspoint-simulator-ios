@@ -77,6 +77,10 @@ public:
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH,
                       bool turnOffScreen = false);
   void setBusyWaitSliceHook(bool (*)(int8_t, uint8_t)) {}
+  // Panel-side calls with nothing to do on the host.
+  void setReaderRefresh(bool) {}
+  void controllerIdle() {}
+  bool displayRetainedGrayscaleOverlay(uint16_t, uint16_t, uint16_t, uint16_t, bool) { return false; }
 
   // Power management
   void deepSleep();

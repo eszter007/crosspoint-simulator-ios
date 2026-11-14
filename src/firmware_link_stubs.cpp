@@ -8,8 +8,9 @@
 #include <cstdint>
 
 // The PlatformIO build skips the firmware's device binding (skip_device_content_protection.py) and
-// takes these instead; the iOS build compiles the real binding and ContentProtection sources.
-#ifndef SIMULATOR_IOS
+// takes these instead; the CMake builds (iOS and desktop) compile the real binding and
+// ContentProtection sources, so these would be defined twice there.
+#ifndef SIMULATOR_CMAKE_BUILD
 #include <ContentProtection.h>
 #include <Crypto.h>
 #include <LcpLicense.h>
@@ -39,7 +40,7 @@ std::unique_ptr<freeink::content::ContentDecryptor> freeink::content::openProtec
   err.clear();
   return nullptr;
 }
-#endif  // SIMULATOR_IOS
+#endif  // SIMULATOR_CMAKE_BUILD
 
 // ---------------------------------------------------------------------------
 // MySerialImpl

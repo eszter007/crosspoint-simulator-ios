@@ -341,6 +341,8 @@ target_include_directories(crosspoint_simulator PRIVATE ${FIRMWARE_INCLUDES})
 target_compile_definitions(crosspoint_simulator PRIVATE
   ${DEVICE_DEFINES}
   SIMULATOR
+  # Set by this CMake build only, never by PlatformIO: see src/firmware_link_stubs.cpp.
+  SIMULATOR_CMAKE_BUILD
   CROSSPOINT_SIMULATOR_PROJECT_WEBSERVER
   # ArduinoJson reads from and converts to the Arduino String the firmware uses; the host build
   # defines no ARDUINO, so the library has to be told. Stream/Print support stays off.
