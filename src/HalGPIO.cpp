@@ -5,6 +5,9 @@
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <SDL.h>
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -903,6 +906,16 @@ void HalGPIO::beginFrame() {
   SimulatorInput::tick();
 }
 
+namespace {
+bool onMainThread() {
+#ifdef __APPLE__
+  return pthread_main_np() != 0;
+#else
+  return true;
+#endif
+}
+}  // namespace
+
 void HalGPIO::update() {
   // Per-frame press/release edges are intentionally NOT cleared here; that
   // happens once per frame in beginFrame(). The firmware calls update() several
@@ -916,8 +929,11 @@ void HalGPIO::update() {
 
   // HalGPIO owns all SDL event polling so keyboard and quit events are never
   // split between two callers (HalDisplay::presentIfNeeded only renders).
+  // SDL reads window events on the main thread only: a firmware task that reads
+  // the buttons while the main loop is busy (the Anki sync's Back watcher) gets
+  // scripted input only.
   SDL_Event e;
-  while (SDL_PollEvent(&e) != 0) {
+  while (onMainThread() && SDL_PollEvent(&e) != 0) {
     if (e.type == SDL_USEREVENT) {
       const int button =
           static_cast<int>(reinterpret_cast<intptr_t>(e.user.data1));

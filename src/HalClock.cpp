@@ -24,7 +24,8 @@ void HalClock::setTimezone(const char *posixTz) {
 }
 
 bool HalClock::localTime(struct tm &out) const {
-  if (!_available)
+  // As on a device without an RTC after a network sync: the host clock is set.
+  if (!hasTime())
     return false;
 
   const std::time_t now = std::time(nullptr);
@@ -153,7 +154,8 @@ bool HalClock::formatDate(char *buf, size_t bufSize,
   return true;
 }
 
-bool HalClock::syncFromNTP() { return _available; }
+// The host clock is the network time: a sync succeeds on every board, RTC or not.
+bool HalClock::syncFromNTP() { return true; }
 
 bool HalClock::systemTimeValid() {
   // The device compares against the firmware build date to tell "RTC never set"
