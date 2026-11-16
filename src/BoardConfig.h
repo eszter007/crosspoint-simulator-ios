@@ -210,6 +210,17 @@ struct TouchConfig {
   TouchController controller = TouchController::None;
 };
 
+// How the board reports button presses, as the SDK profile carries it.
+enum class InputStyle : uint8_t {
+  XteinkAdcLadder,
+  DigitalButtons,
+  DigitalConfirmBackHold,
+  DigitalConfirmPowerHold,
+  DigitalFiveKey,
+  DigitalTwoButton,
+  OnePageAdcLadder,
+};
+
 struct BoardProfile {
   Board board;
   const char *name;
@@ -235,6 +246,8 @@ struct BoardProfile {
   uint8_t tabBarHeightPct = 100;
   uint8_t tabBarWidthPct = 100;
   uint8_t wifiMaxTxPower = 0;
+  // The simulator's buttons behave like the X4's ladder: no shared confirm/power key.
+  InputStyle inputStyle = InputStyle::XteinkAdcLadder;
 };
 
 #if defined(SIMULATOR_DISPLAY_UC8179)
