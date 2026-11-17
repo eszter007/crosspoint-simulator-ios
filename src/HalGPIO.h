@@ -65,6 +65,8 @@ public:
   // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;
+  // The power contact as read now; the host has only the emulated button state.
+  bool isPowerButtonPhysicallyPressed() const { return isPressed(BTN_POWER); }
   // Capacitive page strip (eego A4) and deep-sleep pin prep: nothing to emulate.
   bool wasCapacitivePageKeyPressed(uint8_t) const { return false; }
   bool wasCapacitivePageKeyReleased(uint8_t) const { return false; }
