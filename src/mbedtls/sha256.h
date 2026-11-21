@@ -35,3 +35,12 @@ inline int mbedtls_sha256_finish(mbedtls_sha256_context *ctx, unsigned char outp
 }
 
 inline void mbedtls_sha256_free(mbedtls_sha256_context *) {}
+
+// One-shot form. Like the context functions above, a stand-in, not real SHA-256.
+inline int mbedtls_sha256(const unsigned char *input, size_t ilen, unsigned char output[32], int is224) {
+  mbedtls_sha256_context ctx;
+  mbedtls_sha256_init(&ctx);
+  mbedtls_sha256_starts(&ctx, is224);
+  mbedtls_sha256_update(&ctx, input, ilen);
+  return mbedtls_sha256_finish(&ctx, output);
+}

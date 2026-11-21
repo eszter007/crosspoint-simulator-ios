@@ -22,5 +22,10 @@ bool HalPowerManager::holdWhileUsbPowered(
 void HalPowerManager::setPowerSaving(bool enable) {}
 uint16_t HalPowerManager::getBatteryPercentage() const { return 100; }
 
+bool HalPowerManager::readBatteryPercentage(uint16_t& percent) const {
+  percent = 100;
+  return true;
+}
+
 HalPowerManager::Lock::Lock() {}
 HalPowerManager::Lock::~Lock() {}
