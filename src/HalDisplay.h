@@ -80,6 +80,8 @@ public:
   // Panel-side calls with nothing to do on the host.
   void setReaderRefresh(bool) {}
   void controllerIdle() {}
+  void setOverlayFullTone(bool) {}
+  const char* panelName() const { return nullptr; }
   bool displayRetainedGrayscaleOverlay(uint16_t, uint16_t, uint16_t, uint16_t, bool) { return false; }
 
   // Power management
